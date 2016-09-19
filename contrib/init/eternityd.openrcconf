@@ -1,0 +1,27 @@
+# /etc/conf.d/eternityd: config file for /etc/init.d/eternityd
+
+# Config file location
+#BITCOIND_CONFIGFILE="/etc/eternity/eternity.conf"
+
+# What directory to write pidfile to?  (created and owned by $BITCOIND_USER)
+#BITCOIND_PIDDIR="/var/run/eternityd"
+
+# What filename to give the pidfile
+#BITCOIND_PIDFILE="${BITCOIND_PIDDIR}/eternityd.pid"
+
+# Where to write eternityd data (be mindful that the blockchain is large)
+#BITCOIND_DATADIR="/var/lib/eternityd"
+
+# User and group to own eternityd process
+#BITCOIND_USER="eternity"
+#BITCOIND_GROUP="eternity"
+
+# Path to eternityd executable
+#BITCOIND_BIN="/usr/bin/eternityd"
+
+# Nice value to run eternityd under
+#BITCOIND_NICE=0
+
+# Additional options (avoid -conf and -datadir, use flags above)
+BITCOIND_OPTS="-disablewallet"
+

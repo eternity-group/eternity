@@ -1,0 +1,12 @@
+[Desktop Entry]
+Encoding=UTF-8
+Name=Eternity
+Comment=Eternity P2P Cryptocurrency
+Comment[fr]=Eternity, monnaie virtuelle cryptographique pair à pair
+Comment[tr]=Eternity, eşten eşe kriptografik sanal para birimi
+Exec=eternity-qt %u
+Terminal=false
+Type=Application
+Icon=eternity128
+MimeType=x-scheme-handler/eternity;
+Categories=Office;Finance;
