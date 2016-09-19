@@ -162,9 +162,9 @@ std::string CEternitynodeSync::GetSyncStatus()
     switch (eternitynodeSync.RequestedEternitynodeAssets) {
         case ETERNITYNODE_SYNC_INITIAL: return _("Synchronization pending...");
         case ETERNITYNODE_SYNC_SPORKS: return _("Synchronizing sporks...");
-        case ETERNITYNODE_SYNC_LIST: return _("Synchronizing eternitynodes...");
-        case ETERNITYNODE_SYNC_ENW: return _("Synchronizing eternitynode winners...");
-        case ETERNITYNODE_SYNC_EVOLUTION: return _("Synchronizing evolutions...");
+        case ETERNITYNODE_SYNC_LIST: return _("Synchronizing Eternitynodes...");
+        case ETERNITYNODE_SYNC_ENW: return _("Synchronizing Eternitynode winners...");
+        case ETERNITYNODE_SYNC_EVOLUTION: return _("Synchronizing Evolutions...");
         case ETERNITYNODE_SYNC_FAILED: return _("Synchronization failed");
         case ETERNITYNODE_SYNC_FINISHED: return _("Synchronization finished");
     }

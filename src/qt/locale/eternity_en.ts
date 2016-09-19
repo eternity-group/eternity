@@ -5192,8 +5192,8 @@ for example: alertnotify=echo %%s | mail -s &quot;Eternity Alert&quot; admin@foo
     </message>
     <message>
         <location line="+2"/>
-        <source>Specify eternitynode configuration file (default: %s)</source>
-        <translation>Specify eternitynode configuration file (default: %s)</translation>
+        <source>Specify Eternitynode configuration file (default: %s)</source>
+        <translation>Specify Eternitynode configuration file (default: %s)</translation>
     </message>
     <message>
         <location line="+1"/>
@@ -5212,18 +5212,18 @@ for example: alertnotify=echo %%s | mail -s &quot;Eternity Alert&quot; admin@foo
     </message>
     <message>
         <location line="+1"/>
-        <source>Submitted following entries to eternitynode: %u / %d</source>
-        <translation>Submitted following entries to eternitynode: %u / %d</translation>
+        <source>Submitted following entries to Eternitynode: %u / %d</source>
+        <translation>Submitted following entries to Eternitynode: %u / %d</translation>
     </message>
     <message>
         <location line="+1"/>
-        <source>Submitted to eternitynode, waiting for more entries ( %u / %d ) %s</source>
-        <translation>Submitted to eternitynode, waiting for more entries ( %u / %d ) %s</translation>
+        <source>Submitted to Eternitynode, waiting for more entries ( %u / %d ) %s</source>
+        <translation>Submitted to Eternitynode, waiting for more entries ( %u / %d ) %s</translation>
     </message>
     <message>
         <location line="+1"/>
-        <source>Submitted to eternitynode, waiting in queue %s</source>
-        <translation>Submitted to eternitynode, waiting in queue %s</translation>
+        <source>Submitted to Eternitynode, waiting in queue %s</source>
+        <translation>Submitted to Eternitynode, waiting in queue %s</translation>
     </message>
     <message>
         <location line="+1"/>
@@ -5242,13 +5242,13 @@ for example: alertnotify=echo %%s | mail -s &quot;Eternity Alert&quot; admin@foo
     </message>
     <message>
         <location line="+1"/>
-        <source>Synchronizing eternitynode winners...</source>
-        <translation>Synchronizing eternitynode winners...</translation>
+        <source>Synchronizing Eternitynode winners...</source>
+        <translation>Synchronizing Eternitynode winners...</translation>
     </message>
     <message>
         <location line="+1"/>
-        <source>Synchronizing eternitynodes...</source>
-        <translation>Synchronizing eternitynodes...</translation>
+        <source>Synchronizing Eternitynodes...</source>
+        <translation>Synchronizing Eternitynodes...</translation>
     </message>
     <message>
         <location line="+1"/>

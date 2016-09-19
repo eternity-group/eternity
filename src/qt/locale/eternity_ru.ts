@@ -264,7 +264,7 @@
     </message>
     <message>
         <source>Request payments (generates QR codes and Eternity: URIs)</source>
-        <translation>Запросить платежи (создать QR-коды и Eternity: URI)</translation>
+        <translation>Запросить платежи (создать QR-коды и Eternity: URIs)</translation>
     </message>
     <message>
         <source>&amp;Transactions</source>
@@ -4084,7 +4084,7 @@ rpcpassword=%s
         <translation>Указать тайм-аут соединения в миллисекундах (минимально: 1, по умолчанию: %d)</translation>
     </message>
     <message>
-        <source>Specify eternitynode configuration file (default: %s)</source>
+        <source>Specify Eternitynode configuration file (default: %s)</source>
         <translation>Указать конфигурационный файл для Вечных нод (по умолчанию: %s)</translation>
     </message>
     <message>
@@ -4100,15 +4100,15 @@ rpcpassword=%s
         <translation>Закрыть приложение после завершения импорта блоков с диска (по умолчанию: %u)</translation>
     </message>
     <message>
-        <source>Submitted following entries to eternitynode: %u / %d</source>
+        <source>Submitted following entries to Eternitynode: %u / %d</source>
         <translation>Вечной ноде отправлены следующие записи: %u / %d</translation>
     </message>
     <message>
-        <source>Submitted to eternitynode, waiting for more entries ( %u / %d ) %s</source>
+        <source>Submitted to Eternitynode, waiting for more entries ( %u / %d ) %s</source>
         <translation>Отправлено Вечной ноде, ожидаем больше записей ( %u / %d ) %s</translation>
     </message>
     <message>
-        <source>Submitted to eternitynode, waiting in queue %s</source>
+        <source>Submitted to Eternitynode, waiting in queue %s</source>
         <translation>Отправлено на Вечную ноду, ожидаем в очереди %s</translation>
     </message>
     <message>
@@ -4124,11 +4124,11 @@ rpcpassword=%s
         <translation>Синхронизация Evolution...</translation>
     </message>
     <message>
-        <source>Synchronizing eternitynode winners...</source>
+        <source>Synchronizing Eternitynode winners...</source>
         <translation>Синхронизация списка Вечных нод-победителей...</translation>
     </message>
     <message>
-        <source>Synchronizing eternitynodes...</source>
+        <source>Synchronizing Eternitynodes...</source>
         <translation>Синхронизация списка Вечных нод...</translation>
     </message>
     <message>
