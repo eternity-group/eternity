@@ -134,6 +134,9 @@ public:
         assert(genesis.hashMerkleRoot == uint256("0xb35b2551a3dc3c69177dd167ca8faae415bca87b1227aded604d254555044c30"));
 
         vSeeds.push_back(CDNSSeedData("eternity-group.org", "144.76.33.134"));
+		vSeeds.push_back(CDNSSeedData("95.31.211.13", "95.31.211.13"));
+		vSeeds.push_back(CDNSSeedData("92.255.229.121", "92.255.229.121"));
+		vSeeds.push_back(CDNSSeedData("176.215.13.48", "176.215.13.48"));
 
         base58Prefixes[PUBKEY_ADDRESS] = list_of( 33);                    // Eternity addresses start with 'E'
         base58Prefixes[SCRIPT_ADDRESS] = list_of(  8);                    // Eternity script addresses start with '4'
