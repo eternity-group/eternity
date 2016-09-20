@@ -5237,8 +5237,8 @@ for example: alertnotify=echo %%s | mail -s &quot;Eternity Alert&quot; admin@foo
     </message>
     <message>
         <location line="+2"/>
-        <source>Synchronizing Evolution...</source>
-        <translation>Synchronizing Evolution...</translation>
+        <source>Synchronizing Evolutions...</source>
+        <translation>Synchronizing Evolutions...</translation>
     </message>
     <message>
         <location line="+1"/>

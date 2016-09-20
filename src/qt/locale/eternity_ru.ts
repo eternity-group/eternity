@@ -4120,8 +4120,8 @@ rpcpassword=%s
         <translation>Синхронизация завершена</translation>
     </message>
     <message>
-        <source>Synchronizing Evolution...</source>
-        <translation>Синхронизация Evolution...</translation>
+        <source>Synchronizing Evolutions...</source>
+        <translation>Синхронизация Evolutions...</translation>
     </message>
     <message>
         <source>Synchronizing Eternitynode winners...</source>
