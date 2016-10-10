@@ -258,7 +258,7 @@ void DoConsensusVote(CTransaction& tx, int64_t nBlockHeight)
 {
     if(!fEternityNode) return;
 
-    int n = mnodeman.GetEternitynodeRank(activeEternitynode.vin, nBlockHeight, MIN_INSTANTX_PROTO_VERSION);
+    int n = enodeman.GetEternitynodeRank(activeEternitynode.vin, nBlockHeight, MIN_INSTANTX_PROTO_VERSION);
 
     if(n == -1)
     {
@@ -299,9 +299,9 @@ void DoConsensusVote(CTransaction& tx, int64_t nBlockHeight)
 //received a consensus vote
 bool ProcessConsensusVote(CNode* pnode, CConsensusVote& ctx)
 {
-    int n = mnodeman.GetEternitynodeRank(ctx.vinEternitynode, ctx.nBlockHeight, MIN_INSTANTX_PROTO_VERSION);
+    int n = enodeman.GetEternitynodeRank(ctx.vinEternitynode, ctx.nBlockHeight, MIN_INSTANTX_PROTO_VERSION);
 
-    CEternitynode* pen = mnodeman.Find(ctx.vinEternitynode);
+    CEternitynode* pen = enodeman.Find(ctx.vinEternitynode);
     if(pen != NULL)
         LogPrint("instantx", "InstantX::ProcessConsensusVote - Eternitynode ADDR %s %d\n", pen->addr.ToString().c_str(), n);
 
@@ -309,7 +309,7 @@ bool ProcessConsensusVote(CNode* pnode, CConsensusVote& ctx)
     {
         //can be caused by past versions trying to vote with an invalid protocol
         LogPrint("instantx", "InstantX::ProcessConsensusVote - Unknown Eternitynode\n");
-        mnodeman.AskForMN(pnode, ctx.vinEternitynode);
+        enodeman.AskForMN(pnode, ctx.vinEternitynode);
         return false;
     }
 
@@ -322,7 +322,7 @@ bool ProcessConsensusVote(CNode* pnode, CConsensusVote& ctx)
     if(!ctx.SignatureValid()) {
         LogPrintf("InstantX::ProcessConsensusVote - Signature invalid\n");
         // don't ban, it could just be a non-synced eternitynode
-        mnodeman.AskForMN(pnode, ctx.vinEternitynode);
+        enodeman.AskForMN(pnode, ctx.vinEternitynode);
         return false;
     }
 
@@ -472,7 +472,7 @@ bool CConsensusVote::SignatureValid()
     std::string strMessage = txHash.ToString().c_str() + boost::lexical_cast<std::string>(nBlockHeight);
     //LogPrintf("verify strMessage %s \n", strMessage.c_str());
 
-    CEternitynode* pen = mnodeman.Find(vinEternitynode);
+    CEternitynode* pen = enodeman.Find(vinEternitynode);
 
     if(pen == NULL)
     {
@@ -523,7 +523,7 @@ bool CTransactionLock::SignaturesValid()
 
     BOOST_FOREACH(CConsensusVote vote, vecConsensusVotes)
     {
-        int n = mnodeman.GetEternitynodeRank(vote.vinEternitynode, vote.nBlockHeight, MIN_INSTANTX_PROTO_VERSION);
+        int n = enodeman.GetEternitynodeRank(vote.vinEternitynode, vote.nBlockHeight, MIN_INSTANTX_PROTO_VERSION);
 
         if(n == -1)
         {

@@ -13,7 +13,7 @@
 #include <boost/filesystem.hpp>
 
 /** Eternitynode manager */
-CEternitynodeMan mnodeman;
+CEternitynodeMan enodeman;
 
 struct CompareLastPaid
 {
@@ -52,7 +52,7 @@ CEternitynodeDB::CEternitynodeDB()
     strMagicMessage = "EternitynodeCache";
 }
 
-bool CEternitynodeDB::Write(const CEternitynodeMan& mnodemanToSave)
+bool CEternitynodeDB::Write(const CEternitynodeMan& enodemanToSave)
 {
     int64_t nStart = GetTimeMillis();
 
@@ -60,7 +60,7 @@ bool CEternitynodeDB::Write(const CEternitynodeMan& mnodemanToSave)
     CDataStream ssEternitynodes(SER_DISK, CLIENT_VERSION);
     ssEternitynodes << strMagicMessage; // eternitynode cache file specific magic message
     ssEternitynodes << FLATDATA(Params().MessageStart()); // network specific magic number
-    ssEternitynodes << mnodemanToSave;
+    ssEternitynodes << enodemanToSave;
     uint256 hash = Hash(ssEternitynodes.begin(), ssEternitynodes.end());
     ssEternitynodes << hash;
 
@@ -81,12 +81,12 @@ bool CEternitynodeDB::Write(const CEternitynodeMan& mnodemanToSave)
     fileout.fclose();
 
     LogPrintf("Written info to encache.dat  %dms\n", GetTimeMillis() - nStart);
-    LogPrintf("  %s\n", mnodemanToSave.ToString());
+    LogPrintf("  %s\n", enodemanToSave.ToString());
 
     return true;
 }
 
-CEternitynodeDB::ReadResult CEternitynodeDB::Read(CEternitynodeMan& mnodemanToLoad, bool fDryRun)
+CEternitynodeDB::ReadResult CEternitynodeDB::Read(CEternitynodeMan& enodemanToLoad, bool fDryRun)
 {
     int64_t nStart = GetTimeMillis();
     // open input file, and associate with CAutoFile
@@ -153,21 +153,21 @@ CEternitynodeDB::ReadResult CEternitynodeDB::Read(CEternitynodeMan& mnodemanToLo
             return IncorrectMagicNumber;
         }
         // de-serialize data into CEternitynodeMan object
-        ssEternitynodes >> mnodemanToLoad;
+        ssEternitynodes >> enodemanToLoad;
     }
     catch (std::exception &e) {
-        mnodemanToLoad.Clear();
+        enodemanToLoad.Clear();
         error("%s : Deserialize or I/O error - %s", __func__, e.what());
         return IncorrectFormat;
     }
 
     LogPrintf("Loaded info from encache.dat  %dms\n", GetTimeMillis() - nStart);
-    LogPrintf("  %s\n", mnodemanToLoad.ToString());
+    LogPrintf("  %s\n", enodemanToLoad.ToString());
     if(!fDryRun) {
         LogPrintf("Eternitynode manager - cleaning....\n");
-        mnodemanToLoad.CheckAndRemove(true);
+        enodemanToLoad.CheckAndRemove(true);
         LogPrintf("Eternitynode manager - result:\n");
-        LogPrintf("  %s\n", mnodemanToLoad.ToString());
+        LogPrintf("  %s\n", enodemanToLoad.ToString());
     }
 
     return Ok;
@@ -178,10 +178,10 @@ void DumpEternitynodes()
     int64_t nStart = GetTimeMillis();
 
     CEternitynodeDB mndb;
-    CEternitynodeMan tempMnodeman;
+    CEternitynodeMan tempEnodeman;
 
     LogPrintf("Verifying encache.dat format...\n");
-    CEternitynodeDB::ReadResult readResult = mndb.Read(tempMnodeman, true);
+    CEternitynodeDB::ReadResult readResult = mndb.Read(tempEnodeman, true);
     // there was an error and it was not an error on file opening => do not proceed
     if (readResult == CEternitynodeDB::FileError)
         LogPrintf("Missing eternitynode cache file - encache.dat, will try to recreate\n");
@@ -197,7 +197,7 @@ void DumpEternitynodes()
         }
     }
     LogPrintf("Writting info to encache.dat...\n");
-    mndb.Write(mnodeman);
+    mndb.Write(enodeman);
 
     LogPrintf("Eternitynode dump finished  %dms\n", GetTimeMillis() - nStart);
 }
@@ -233,7 +233,7 @@ void CEternitynodeMan::AskForMN(CNode* pnode, CTxIn &vin)
         if (GetTime() < t) return; // we've asked recently
     }
 
-    // ask for the mnb info once from the node that sent mnp
+    // ask for the enb info once from the node that sent mnp
 
     LogPrintf("CEternitynodeMan::AskForMN - Asking node for missing entry, vin: %s\n", vin.ToString());
     pnode->PushMessage("dseg", vin);
@@ -267,11 +267,11 @@ void CEternitynodeMan::CheckAndRemove(bool forceExpiredRemoval)
 
             //erase all of the broadcasts we've seen from this vin
             // -- if we missed a few pings and the node was removed, this will allow is to get it back without them 
-            //    sending a brand new mnb
+            //    sending a brand new enb
             map<uint256, CEternitynodeBroadcast>::iterator it3 = mapSeenEternitynodeBroadcast.begin();
             while(it3 != mapSeenEternitynodeBroadcast.end()){
                 if((*it3).second.vin == (*it).vin){
-                    eternitynodeSync.mapSeenSyncMNB.erase((*it3).first);
+                    eternitynodeSync.mapSeenSyncENB.erase((*it3).first);
                     mapSeenEternitynodeBroadcast.erase(it3++);
                 } else {
                     ++it3;
@@ -329,7 +329,7 @@ void CEternitynodeMan::CheckAndRemove(bool forceExpiredRemoval)
     while(it3 != mapSeenEternitynodeBroadcast.end()){
         if((*it3).second.lastPing.sigTime < GetTime() - ETERNITYNODE_REMOVAL_SECONDS*2){
             LogPrint("eternitynode", "CEternitynodeMan::CheckAndRemove - Removing expired Eternitynode broadcast %s\n", (*it3).second.GetHash().ToString());
-            eternitynodeSync.mapSeenSyncMNB.erase((*it3).second.GetHash());
+            eternitynodeSync.mapSeenSyncENB.erase((*it3).second.GetHash());
             mapSeenEternitynodeBroadcast.erase(it3++);
         } else {
             ++it3;
@@ -682,14 +682,14 @@ void CEternitynodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CDa
 
     LOCK(cs_process_message);
 
-    if (strCommand == "mnb") { //Eternitynode Broadcast
-        CEternitynodeBroadcast mnb;
-        vRecv >> mnb;
+    if (strCommand == "enb") { //Eternitynode Broadcast
+        CEternitynodeBroadcast enb;
+        vRecv >> enb;
 
         int nDoS = 0;
-        if (CheckMnbAndUpdateEternitynodeList(mnb, nDoS)) {
+        if (CheckEnbAndUpdateEternitynodeList(enb, nDoS)) {
             // use announced Eternitynode as a peer
-             addrman.Add(CAddress(mnb.addr), pfrom->addr, 2*60*60);
+             addrman.Add(CAddress(enb.addr), pfrom->addr, 2*60*60);
         } else {
             if(nDoS > 0) Misbehaving(pfrom->GetId(), nDoS);
         }
@@ -713,7 +713,7 @@ void CEternitynodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CDa
         } else {
             // if nothing significant failed, search existing Eternitynode list
             CEternitynode* pen = Find(mnp.vin);
-            // if it's known, don't ask for the mnb, just return
+            // if it's known, don't ask for the enb, just return
             if(pen != NULL) return;
         }
 
@@ -754,12 +754,12 @@ void CEternitynodeMan::ProcessMessage(CNode* pfrom, std::string& strCommand, CDa
             if(mn.IsEnabled()) {
                 LogPrint("eternitynode", "dseg - Sending Eternitynode entry - %s \n", mn.addr.ToString());
                 if(vin == CTxIn() || vin == mn.vin){
-                    CEternitynodeBroadcast mnb = CEternitynodeBroadcast(mn);
-                    uint256 hash = mnb.GetHash();
+                    CEternitynodeBroadcast enb = CEternitynodeBroadcast(mn);
+                    uint256 hash = enb.GetHash();
                     pfrom->PushInventory(CInv(MSG_ETERNITYNODE_ANNOUNCE, hash));
                     nInvCount++;
 
-                    if(!mapSeenEternitynodeBroadcast.count(hash)) mapSeenEternitynodeBroadcast.insert(make_pair(hash, mnb));
+                    if(!mapSeenEternitynodeBroadcast.count(hash)) mapSeenEternitynodeBroadcast.insert(make_pair(hash, enb));
 
                     if(vin == mn.vin) {
                         LogPrintf("dseg - Sent 1 Eternitynode entries to %s\n", pfrom->addr.ToString());
@@ -805,54 +805,54 @@ std::string CEternitynodeMan::ToString() const
     return info.str();
 }
 
-void CEternitynodeMan::UpdateEternitynodeList(CEternitynodeBroadcast mnb) {
-    mapSeenEternitynodePing.insert(make_pair(mnb.lastPing.GetHash(), mnb.lastPing));
-    mapSeenEternitynodeBroadcast.insert(make_pair(mnb.GetHash(), mnb));
-    eternitynodeSync.AddedEternitynodeList(mnb.GetHash());
+void CEternitynodeMan::UpdateEternitynodeList(CEternitynodeBroadcast enb) {
+    mapSeenEternitynodePing.insert(make_pair(enb.lastPing.GetHash(), enb.lastPing));
+    mapSeenEternitynodeBroadcast.insert(make_pair(enb.GetHash(), enb));
+    eternitynodeSync.AddedEternitynodeList(enb.GetHash());
 
-    LogPrintf("CEternitynodeMan::UpdateEternitynodeList() - addr: %s\n    vin: %s\n", mnb.addr.ToString(), mnb.vin.ToString());
+    LogPrintf("CEternitynodeMan::UpdateEternitynodeList() - addr: %s\n    vin: %s\n", enb.addr.ToString(), enb.vin.ToString());
 
-    CEternitynode* pen = Find(mnb.vin);
+    CEternitynode* pen = Find(enb.vin);
     if(pen == NULL)
     {
-        CEternitynode mn(mnb);
+        CEternitynode mn(enb);
         Add(mn);
     } else {
-        pen->UpdateFromNewBroadcast(mnb);
+        pen->UpdateFromNewBroadcast(enb);
     }
 }
 
-bool CEternitynodeMan::CheckMnbAndUpdateEternitynodeList(CEternitynodeBroadcast mnb, int& nDos) {
+bool CEternitynodeMan::CheckEnbAndUpdateEternitynodeList(CEternitynodeBroadcast enb, int& nDos) {
     nDos = 0;
-    LogPrint("eternitynode", "CEternitynodeMan::CheckMnbAndUpdateEternitynodeList - Eternitynode broadcast, vin: %s\n", mnb.vin.ToString());
+    LogPrint("eternitynode", "CEternitynodeMan::CheckEnbAndUpdateEternitynodeList - Eternitynode broadcast, vin: %s\n", enb.vin.ToString());
 
-    if(mapSeenEternitynodeBroadcast.count(mnb.GetHash())) { //seen
-        eternitynodeSync.AddedEternitynodeList(mnb.GetHash());
+    if(mapSeenEternitynodeBroadcast.count(enb.GetHash())) { //seen
+        eternitynodeSync.AddedEternitynodeList(enb.GetHash());
         return true;
     }
-    mapSeenEternitynodeBroadcast.insert(make_pair(mnb.GetHash(), mnb));
+    mapSeenEternitynodeBroadcast.insert(make_pair(enb.GetHash(), enb));
 
-    LogPrint("eternitynode", "CEternitynodeMan::CheckMnbAndUpdateEternitynodeList - Eternitynode broadcast, vin: %s new\n", mnb.vin.ToString());
+    LogPrint("eternitynode", "CEternitynodeMan::CheckEnbAndUpdateEternitynodeList - Eternitynode broadcast, vin: %s new\n", enb.vin.ToString());
 
-    if(!mnb.CheckAndUpdate(nDos)){
-        LogPrint("eternitynode", "CEternitynodeMan::CheckMnbAndUpdateEternitynodeList - Eternitynode broadcast, vin: %s CheckAndUpdate failed\n", mnb.vin.ToString());
+    if(!enb.CheckAndUpdate(nDos)){
+        LogPrint("eternitynode", "CEternitynodeMan::CheckEnbAndUpdateEternitynodeList - Eternitynode broadcast, vin: %s CheckAndUpdate failed\n", enb.vin.ToString());
         return false;
     }
 
     // make sure the vout that was signed is related to the transaction that spawned the Eternitynode
     //  - this is expensive, so it's only done once per Eternitynode
-    if(!spySendSigner.IsVinAssociatedWithPubkey(mnb.vin, mnb.pubkey)) {
-        LogPrintf("CEternitynodeMan::CheckMnbAndUpdateEternitynodeList - Got mismatched pubkey and vin\n");
+    if(!spySendSigner.IsVinAssociatedWithPubkey(enb.vin, enb.pubkey)) {
+        LogPrintf("CEternitynodeMan::CheckEnbAndUpdateEternitynodeList - Got mismatched pubkey and vin\n");
         nDos = 33;
         return false;
     }
 
     // make sure it's still unspent
     //  - this is checked later by .check() in many places and by ThreadCheckSpySendPool()
-    if(mnb.CheckInputsAndAdd(nDos)) {
-        eternitynodeSync.AddedEternitynodeList(mnb.GetHash());
+    if(enb.CheckInputsAndAdd(nDos)) {
+        eternitynodeSync.AddedEternitynodeList(enb.GetHash());
     } else {
-        LogPrintf("CEternitynodeMan::CheckMnbAndUpdateEternitynodeList - Rejected Eternitynode entry %s\n", mnb.addr.ToString());
+        LogPrintf("CEternitynodeMan::CheckEnbAndUpdateEternitynodeList - Rejected Eternitynode entry %s\n", enb.addr.ToString());
         return false;
     }
 

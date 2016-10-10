@@ -62,7 +62,7 @@ void CEternitynodeSync::Reset()
     lastEternitynodeList = 0;
     lastEternitynodeWinner = 0;
     lastEvolutionItem = 0;
-    mapSeenSyncMNB.clear();
+    mapSeenSyncENB.clear();
     mapSeenSyncENW.clear();
     mapSeenSyncEvolution.clear();
     lastFailure = 0;
@@ -82,14 +82,14 @@ void CEternitynodeSync::Reset()
 
 void CEternitynodeSync::AddedEternitynodeList(uint256 hash)
 {
-    if(mnodeman.mapSeenEternitynodeBroadcast.count(hash)) {
-        if(mapSeenSyncMNB[hash] < ETERNITYNODE_SYNC_THRESHOLD) {
+    if(enodeman.mapSeenEternitynodeBroadcast.count(hash)) {
+        if(mapSeenSyncENB[hash] < ETERNITYNODE_SYNC_THRESHOLD) {
             lastEternitynodeList = GetTime();
-            mapSeenSyncMNB[hash]++;
+            mapSeenSyncENB[hash]++;
         }
     } else {
         lastEternitynodeList = GetTime();
-        mapSeenSyncMNB.insert(make_pair(hash, 1));
+        mapSeenSyncENB.insert(make_pair(hash, 1));
     }
 }
 
@@ -233,7 +233,7 @@ void CEternitynodeSync::Process()
         /* 
             Resync if we lose all eternitynodes from sleep/wake or failure to sync originally
         */
-        if(mnodeman.CountEnabled() == 0) {
+        if(enodeman.CountEnabled() == 0) {
             Reset();
         } else
             return;
@@ -263,9 +263,9 @@ void CEternitynodeSync::Process()
             if(RequestedEternitynodeAttempt <= 2) {
                 pnode->PushMessage("getsporks"); //get current network sporks
             } else if(RequestedEternitynodeAttempt < 4) {
-                mnodeman.DsegUpdate(pnode); 
+                enodeman.DsegUpdate(pnode); 
             } else if(RequestedEternitynodeAttempt < 6) {
-                int nMnCount = mnodeman.CountEnabled();
+                int nMnCount = enodeman.CountEnabled();
                 pnode->PushMessage("mnget", nMnCount); //sync payees
                 uint256 n = 0;
                 pnode->PushMessage("envs", n); //sync eternitynode votes
@@ -317,7 +317,7 @@ void CEternitynodeSync::Process()
 
                 if(RequestedEternitynodeAttempt >= ETERNITYNODE_SYNC_THRESHOLD*3) return;
 
-                mnodeman.DsegUpdate(pnode);
+                enodeman.DsegUpdate(pnode);
                 RequestedEternitynodeAttempt++;
                 return;
             }
@@ -351,7 +351,7 @@ void CEternitynodeSync::Process()
                 CBlockIndex* pindexPrev = chainActive.Tip();
                 if(pindexPrev == NULL) return;
 
-                int nMnCount = mnodeman.CountEnabled();
+                int nMnCount = enodeman.CountEnabled();
                 pnode->PushMessage("mnget", nMnCount); //sync payees
                 RequestedEternitynodeAttempt++;
 

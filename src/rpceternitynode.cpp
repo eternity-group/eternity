@@ -108,7 +108,7 @@ Value getpoolinfo(const Array& params, bool fHelp)
             "Returns an object containing anonymous pool-related information.");
 
     Object obj;
-    obj.push_back(Pair("current_eternitynode",        mnodeman.GetCurrentEternityNode()->addr.ToString()));
+    obj.push_back(Pair("current_eternitynode",        enodeman.GetCurrentEternityNode()->addr.ToString()));
     obj.push_back(Pair("state",        spySendPool.GetState()));
     obj.push_back(Pair("entries",      spySendPool.GetEntriesCount()));
     obj.push_back(Pair("entries_accepted",      spySendPool.GetCountEntriesAccepted()));
@@ -191,23 +191,23 @@ Value eternitynode(const Array& params, bool fHelp)
             int nCount = 0;
 
             if(chainActive.Tip())
-                mnodeman.GetNextEternitynodeInQueueForPayment(chainActive.Tip()->nHeight, true, nCount);
+                enodeman.GetNextEternitynodeInQueueForPayment(chainActive.Tip()->nHeight, true, nCount);
 
-            if(params[1] == "ds") return mnodeman.CountEnabled(MIN_POOL_PEER_PROTO_VERSION);
-            if(params[1] == "enabled") return mnodeman.CountEnabled();
+            if(params[1] == "ds") return enodeman.CountEnabled(MIN_POOL_PEER_PROTO_VERSION);
+            if(params[1] == "enabled") return enodeman.CountEnabled();
             if(params[1] == "qualify") return nCount;
             if(params[1] == "all") return strprintf("Total: %d (SS Compatible: %d / Enabled: %d / Qualify: %d)",
-                                                    mnodeman.size(),
-                                                    mnodeman.CountEnabled(MIN_POOL_PEER_PROTO_VERSION),
-                                                    mnodeman.CountEnabled(),
+                                                    enodeman.size(),
+                                                    enodeman.CountEnabled(MIN_POOL_PEER_PROTO_VERSION),
+                                                    enodeman.CountEnabled(),
                                                     nCount);
         }
-        return mnodeman.size();
+        return enodeman.size();
     }
 
     if (strCommand == "current")
     {
-        CEternitynode* winner = mnodeman.GetCurrentEternityNode(1);
+        CEternitynode* winner = enodeman.GetCurrentEternityNode(1);
         if(winner) {
             Object obj;
 
@@ -306,14 +306,14 @@ Value eternitynode(const Array& params, bool fHelp)
             if(mne.getAlias() == alias) {
                 found = true;
                 std::string errorMessage;
-                CEternitynodeBroadcast mnb;
+                CEternitynodeBroadcast enb;
 
-                bool result = activeEternitynode.CreateBroadcast(mne.getIp(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), errorMessage, mnb);
+                bool result = activeEternitynode.CreateBroadcast(mne.getIp(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), errorMessage, enb);
 
                 statusObj.push_back(Pair("result", result ? "successful" : "failed"));
                 if(result) {
-                    mnodeman.UpdateEternitynodeList(mnb);
-                    mnb.Relay();
+                    enodeman.UpdateEternitynodeList(enb);
+                    enb.Relay();
                 } else {
                     statusObj.push_back(Pair("errorMessage", errorMessage));
                 }
@@ -366,13 +366,13 @@ Value eternitynode(const Array& params, bool fHelp)
             std::string errorMessage;
 
             CTxIn vin = CTxIn(uint256(mne.getTxHash()), uint32_t(atoi(mne.getOutputIndex().c_str())));
-            CEternitynode *pen = mnodeman.Find(vin);
-            CEternitynodeBroadcast mnb;
+            CEternitynode *pen = enodeman.Find(vin);
+            CEternitynodeBroadcast enb;
 
             if(strCommand == "start-missing" && pen) continue;
             if(strCommand == "start-disabled" && pen && pen->IsEnabled()) continue;
 
-            bool result = activeEternitynode.CreateBroadcast(mne.getIp(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), errorMessage, mnb);
+            bool result = activeEternitynode.CreateBroadcast(mne.getIp(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), errorMessage, enb);
 
             Object statusObj;
             statusObj.push_back(Pair("alias", mne.getAlias()));
@@ -380,8 +380,8 @@ Value eternitynode(const Array& params, bool fHelp)
 
             if(result) {
                 successful++;
-                mnodeman.UpdateEternitynodeList(mnb);
-                mnb.Relay();
+                enodeman.UpdateEternitynodeList(enb);
+                enb.Relay();
             } else {
                 failed++;
                 statusObj.push_back(Pair("errorMessage", errorMessage));
@@ -421,7 +421,7 @@ Value eternitynode(const Array& params, bool fHelp)
 
         BOOST_FOREACH(CEternitynodeConfig::CEternitynodeEntry mne, eternitynodeConfig.getEntries()) {
             CTxIn vin = CTxIn(uint256(mne.getTxHash()), uint32_t(atoi(mne.getOutputIndex().c_str())));
-            CEternitynode *pen = mnodeman.Find(vin);
+            CEternitynode *pen = enodeman.Find(vin);
 
             std::string strStatus = pen ? pen->Status() : "MISSING";
 
@@ -456,7 +456,7 @@ Value eternitynode(const Array& params, bool fHelp)
         if(!fEternityNode) throw runtime_error("This is not a eternitynode\n");
 
         Object mnObj;
-        CEternitynode *pen = mnodeman.Find(activeEternitynode.vin);
+        CEternitynode *pen = enodeman.Find(activeEternitynode.vin);
 
         mnObj.push_back(Pair("vin", activeEternitynode.vin.ToString()));
         mnObj.push_back(Pair("service", activeEternitynode.service.ToString()));
@@ -496,7 +496,7 @@ Value eternitynode(const Array& params, bool fHelp)
         }
         Object obj;
 
-        std::vector<CEternitynode> vEternitynodes = mnodeman.GetFullEternitynodeVector();
+        std::vector<CEternitynode> vEternitynodes = enodeman.GetFullEternitynodeVector();
         for(int nHeight = chainActive.Tip()->nHeight-nLast; nHeight < chainActive.Tip()->nHeight+20; nHeight++){
             uint256 nHigh = 0;
             CEternitynode *pBestEternitynode = NULL;
@@ -555,14 +555,14 @@ Value eternitynodelist(const Array& params, bool fHelp)
 
     Object obj;
     if (strMode == "rank") {
-        std::vector<pair<int, CEternitynode> > vEternitynodeRanks = mnodeman.GetEternitynodeRanks(chainActive.Tip()->nHeight);
+        std::vector<pair<int, CEternitynode> > vEternitynodeRanks = enodeman.GetEternitynodeRanks(chainActive.Tip()->nHeight);
         BOOST_FOREACH(PAIRTYPE(int, CEternitynode)& s, vEternitynodeRanks) {
             std::string strVin = s.second.vin.prevout.ToStringShort();
             if(strFilter !="" && strVin.find(strFilter) == string::npos) continue;
             obj.push_back(Pair(strVin,       s.first));
         }
     } else {
-        std::vector<CEternitynode> vEternitynodes = mnodeman.GetFullEternitynodeVector();
+        std::vector<CEternitynode> vEternitynodes = enodeman.GetFullEternitynodeVector();
         BOOST_FOREACH(CEternitynode& mn, vEternitynodes) {
             std::string strVin = mn.vin.prevout.ToStringShort();
             if (strMode == "activeseconds") {
@@ -618,15 +618,15 @@ Value eternitynodelist(const Array& params, bool fHelp)
 
 }
 
-bool DecodeHexVecMnb(std::vector<CEternitynodeBroadcast>& vecMnb, std::string strHexMnb) {
+bool DecodeHexVecEnb(std::vector<CEternitynodeBroadcast>& vecEnb, std::string strHexEnb) {
 
-    if (!IsHex(strHexMnb))
+    if (!IsHex(strHexEnb))
         return false;
 
-    vector<unsigned char> mnbData(ParseHex(strHexMnb));
-    CDataStream ssData(mnbData, SER_NETWORK, PROTOCOL_VERSION);
+    vector<unsigned char> enbData(ParseHex(strHexEnb));
+    CDataStream ssData(enbData, SER_NETWORK, PROTOCOL_VERSION);
     try {
-        ssData >> vecMnb;
+        ssData >> vecEnb;
     }
     catch (const std::exception&) {
         return false;
@@ -685,7 +685,7 @@ Value eternitynodebroadcast(const Array& params, bool fHelp)
         bool found = false;
 
         Object statusObj;
-        std::vector<CEternitynodeBroadcast> vecMnb;
+        std::vector<CEternitynodeBroadcast> vecEnb;
 
         statusObj.push_back(Pair("alias", alias));
 
@@ -693,16 +693,16 @@ Value eternitynodebroadcast(const Array& params, bool fHelp)
             if(mne.getAlias() == alias) {
                 found = true;
                 std::string errorMessage;
-                CEternitynodeBroadcast mnb;
+                CEternitynodeBroadcast enb;
 
-                bool result = activeEternitynode.CreateBroadcast(mne.getIp(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), errorMessage, mnb, true);
+                bool result = activeEternitynode.CreateBroadcast(mne.getIp(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), errorMessage, enb, true);
 
                 statusObj.push_back(Pair("result", result ? "successful" : "failed"));
                 if(result) {
-                    vecMnb.push_back(mnb);
-                    CDataStream ssVecMnb(SER_NETWORK, PROTOCOL_VERSION);
-                    ssVecMnb << vecMnb;
-                    statusObj.push_back(Pair("hex", HexStr(ssVecMnb.begin(), ssVecMnb.end())));
+                    vecEnb.push_back(enb);
+                    CDataStream ssVecEnb(SER_NETWORK, PROTOCOL_VERSION);
+                    ssVecEnb << vecEnb;
+                    statusObj.push_back(Pair("hex", HexStr(ssVecEnb.begin(), ssVecEnb.end())));
                 } else {
                     statusObj.push_back(Pair("errorMessage", errorMessage));
                 }
@@ -748,15 +748,15 @@ Value eternitynodebroadcast(const Array& params, bool fHelp)
         int failed = 0;
 
         Object resultsObj;
-        std::vector<CEternitynodeBroadcast> vecMnb;
+        std::vector<CEternitynodeBroadcast> vecEnb;
 
         BOOST_FOREACH(CEternitynodeConfig::CEternitynodeEntry mne, eternitynodeConfig.getEntries()) {
             std::string errorMessage;
 
             CTxIn vin = CTxIn(uint256(mne.getTxHash()), uint32_t(atoi(mne.getOutputIndex().c_str())));
-            CEternitynodeBroadcast mnb;
+            CEternitynodeBroadcast enb;
 
-            bool result = activeEternitynode.CreateBroadcast(mne.getIp(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), errorMessage, mnb, true);
+            bool result = activeEternitynode.CreateBroadcast(mne.getIp(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), errorMessage, enb, true);
 
             Object statusObj;
             statusObj.push_back(Pair("alias", mne.getAlias()));
@@ -764,7 +764,7 @@ Value eternitynodebroadcast(const Array& params, bool fHelp)
 
             if(result) {
                 successful++;
-                vecMnb.push_back(mnb);
+                vecEnb.push_back(enb);
             } else {
                 failed++;
                 statusObj.push_back(Pair("errorMessage", errorMessage));
@@ -774,12 +774,12 @@ Value eternitynodebroadcast(const Array& params, bool fHelp)
         }
         pwalletMain->Lock();
 
-        CDataStream ssVecMnb(SER_NETWORK, PROTOCOL_VERSION);
-        ssVecMnb << vecMnb;
+        CDataStream ssVecEnb(SER_NETWORK, PROTOCOL_VERSION);
+        ssVecEnb << vecEnb;
         Object returnObj;
         returnObj.push_back(Pair("overall", strprintf("Successfully created broadcast messages for %d eternitynodes, failed to create %d, total %d", successful, failed, successful + failed)));
         returnObj.push_back(Pair("detail", resultsObj));
-        returnObj.push_back(Pair("hex", HexStr(ssVecMnb.begin(), ssVecMnb.end())));
+        returnObj.push_back(Pair("hex", HexStr(ssVecEnb.begin(), ssVecEnb.end())));
 
         return returnObj;
     }
@@ -792,31 +792,31 @@ Value eternitynodebroadcast(const Array& params, bool fHelp)
         int successful = 0;
         int failed = 0;
 
-        std::vector<CEternitynodeBroadcast> vecMnb;
+        std::vector<CEternitynodeBroadcast> vecEnb;
         Object returnObj;
 
-        if (!DecodeHexVecMnb(vecMnb, params[1].get_str()))
+        if (!DecodeHexVecEnb(vecEnb, params[1].get_str()))
             throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Eternitynode broadcast message decode failed");
 
-        BOOST_FOREACH(CEternitynodeBroadcast& mnb, vecMnb) {
+        BOOST_FOREACH(CEternitynodeBroadcast& enb, vecEnb) {
             Object resultObj;
 
-            if(mnb.VerifySignature()) {
+            if(enb.VerifySignature()) {
                 successful++;
-                resultObj.push_back(Pair("vin", mnb.vin.ToString()));
-                resultObj.push_back(Pair("addr", mnb.addr.ToString()));
-                resultObj.push_back(Pair("pubkey", CBitcoinAddress(mnb.pubkey.GetID()).ToString()));
-                resultObj.push_back(Pair("pubkey2", CBitcoinAddress(mnb.pubkey2.GetID()).ToString()));
-                resultObj.push_back(Pair("vchSig", EncodeBase64(&mnb.sig[0], mnb.sig.size())));
-                resultObj.push_back(Pair("sigTime", mnb.sigTime));
-                resultObj.push_back(Pair("protocolVersion", mnb.protocolVersion));
-                resultObj.push_back(Pair("nLastDsq", mnb.nLastDsq));
+                resultObj.push_back(Pair("vin", enb.vin.ToString()));
+                resultObj.push_back(Pair("addr", enb.addr.ToString()));
+                resultObj.push_back(Pair("pubkey", CBitcoinAddress(enb.pubkey.GetID()).ToString()));
+                resultObj.push_back(Pair("pubkey2", CBitcoinAddress(enb.pubkey2.GetID()).ToString()));
+                resultObj.push_back(Pair("vchSig", EncodeBase64(&enb.sig[0], enb.sig.size())));
+                resultObj.push_back(Pair("sigTime", enb.sigTime));
+                resultObj.push_back(Pair("protocolVersion", enb.protocolVersion));
+                resultObj.push_back(Pair("nLastDsq", enb.nLastDsq));
 
                 Object lastPingObj;
-                lastPingObj.push_back(Pair("vin", mnb.lastPing.vin.ToString()));
-                lastPingObj.push_back(Pair("blockHash", mnb.lastPing.blockHash.ToString()));
-                lastPingObj.push_back(Pair("sigTime", mnb.lastPing.sigTime));
-                lastPingObj.push_back(Pair("vchSig", EncodeBase64(&mnb.lastPing.vchSig[0], mnb.lastPing.vchSig.size())));
+                lastPingObj.push_back(Pair("vin", enb.lastPing.vin.ToString()));
+                lastPingObj.push_back(Pair("blockHash", enb.lastPing.blockHash.ToString()));
+                lastPingObj.push_back(Pair("sigTime", enb.lastPing.sigTime));
+                lastPingObj.push_back(Pair("vchSig", EncodeBase64(&enb.lastPing.vchSig[0], enb.lastPing.vchSig.size())));
 
                 resultObj.push_back(Pair("lastPing", lastPingObj));
             } else {
@@ -824,7 +824,7 @@ Value eternitynodebroadcast(const Array& params, bool fHelp)
                 resultObj.push_back(Pair("errorMessage", "Eternitynode broadcast signature verification failed"));
             }
 
-            returnObj.push_back(Pair(mnb.GetHash().ToString(), resultObj));
+            returnObj.push_back(Pair(enb.GetHash().ToString(), resultObj));
         }
 
         returnObj.push_back(Pair("overall", strprintf("Successfully decoded broadcast messages for %d eternitynodes, failed to decode %d, total %d", successful, failed, successful + failed)));
@@ -844,42 +844,42 @@ Value eternitynodebroadcast(const Array& params, bool fHelp)
         int failed = 0;
         bool fSafe = params.size() == 2;
 
-        std::vector<CEternitynodeBroadcast> vecMnb;
+        std::vector<CEternitynodeBroadcast> vecEnb;
         Object returnObj;
 
-        if (!DecodeHexVecMnb(vecMnb, params[1].get_str()))
+        if (!DecodeHexVecEnb(vecEnb, params[1].get_str()))
             throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Eternitynode broadcast message decode failed");
 
         // verify all signatures first, bailout if any of them broken
-        BOOST_FOREACH(CEternitynodeBroadcast& mnb, vecMnb) {
+        BOOST_FOREACH(CEternitynodeBroadcast& enb, vecEnb) {
             Object resultObj;
 
-            resultObj.push_back(Pair("vin", mnb.vin.ToString()));
-            resultObj.push_back(Pair("addr", mnb.addr.ToString()));
+            resultObj.push_back(Pair("vin", enb.vin.ToString()));
+            resultObj.push_back(Pair("addr", enb.addr.ToString()));
 
             int nDos = 0;
             bool fResult;
-            if (mnb.VerifySignature()) {
+            if (enb.VerifySignature()) {
                 if (fSafe) {
-                    fResult = mnodeman.CheckMnbAndUpdateEternitynodeList(mnb, nDos);
+                    fResult = enodeman.CheckEnbAndUpdateEternitynodeList(enb, nDos);
                 } else {
-                    mnodeman.UpdateEternitynodeList(mnb);
-                    mnb.Relay();
+                    enodeman.UpdateEternitynodeList(enb);
+                    enb.Relay();
                     fResult = true;
                 }
             } else fResult = false;
 
             if(fResult) {
                 successful++;
-                mnodeman.UpdateEternitynodeList(mnb);
-                mnb.Relay();
-                resultObj.push_back(Pair(mnb.GetHash().ToString(), "successful"));
+                enodeman.UpdateEternitynodeList(enb);
+                enb.Relay();
+                resultObj.push_back(Pair(enb.GetHash().ToString(), "successful"));
             } else {
                 failed++;
                 resultObj.push_back(Pair("errorMessage", "Eternitynode broadcast signature verification failed"));
             }
 
-            returnObj.push_back(Pair(mnb.GetHash().ToString(), resultObj));
+            returnObj.push_back(Pair(enb.GetHash().ToString(), resultObj));
         }
 
         returnObj.push_back(Pair("overall", strprintf("Successfully relayed broadcast messages for %d eternitynodes, failed to relay %d, total %d", successful, failed, successful + failed)));

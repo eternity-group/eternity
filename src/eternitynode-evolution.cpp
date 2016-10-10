@@ -559,7 +559,7 @@ bool CEvolutionManager::IsEvolutionPaymentBlock(int nBlockHeight)
     /*
         If evolution doesn't have 5% of the network votes, then we should pay a Eternitynode instead
     */
-    if(nHighestCount > mnodeman.CountEnabled(MIN_EVOLUTION_PEER_PROTO_VERSION)/20) return true;
+    if(nHighestCount > enodeman.CountEnabled(MIN_EVOLUTION_PEER_PROTO_VERSION)/20) return true;
 
     return false;
 }
@@ -606,7 +606,7 @@ bool CEvolutionManager::IsTransactionValid(const CTransaction& txNew, int nBlock
     /*
         If evolution doesn't have 5% of the network votes, then we should pay a Eternitynode instead
     */
-    if(nHighestCount < mnodeman.CountEnabled(MIN_EVOLUTION_PEER_PROTO_VERSION)/20) return false;
+    if(nHighestCount < enodeman.CountEnabled(MIN_EVOLUTION_PEER_PROTO_VERSION)/20) return false;
 
     // check the highest finalized Evolutions (+/- 10% to assist in consensus)
 
@@ -615,7 +615,7 @@ bool CEvolutionManager::IsTransactionValid(const CTransaction& txNew, int nBlock
     {
         CFinalizedEvolution* pfinalizedEvolution = &((*it).second);
 
-        if(pfinalizedEvolution->GetVoteCount() > nHighestCount - mnodeman.CountEnabled(MIN_EVOLUTION_PEER_PROTO_VERSION)/10){
+        if(pfinalizedEvolution->GetVoteCount() > nHighestCount - enodeman.CountEnabled(MIN_EVOLUTION_PEER_PROTO_VERSION)/10){
             if(nBlockHeight >= pfinalizedEvolution->GetBlockStart() && nBlockHeight <= pfinalizedEvolution->GetBlockEnd()){
                 if(pfinalizedEvolution->IsTransactionValid(txNew, nBlockHeight)){
                     return true;
@@ -700,7 +700,7 @@ std::vector<CEvolutionProposal*> CEvolutionManager::GetEvolution()
         //prop start/end should be inside this period
         if(pevolutionProposal->fValid && pevolutionProposal->nBlockStart <= nBlockStart &&
                 pevolutionProposal->nBlockEnd >= nBlockEnd &&
-                pevolutionProposal->GetYeas() - pevolutionProposal->GetNays() > mnodeman.CountEnabled(MIN_EVOLUTION_PEER_PROTO_VERSION)/10 && 
+                pevolutionProposal->GetYeas() - pevolutionProposal->GetNays() > enodeman.CountEnabled(MIN_EVOLUTION_PEER_PROTO_VERSION)/10 && 
                 pevolutionProposal->IsEstablished())
         {
             if(pevolutionProposal->GetAmount() + nEvolutionAllocated <= nTotalEvolution) {
@@ -980,10 +980,10 @@ void CEvolutionManager::ProcessMessage(CNode* pfrom, std::string& strCommand, CD
             return;
         }
 
-        CEternitynode* pen = mnodeman.Find(vote.vin);
+        CEternitynode* pen = enodeman.Find(vote.vin);
         if(pen == NULL) {
             LogPrint("enevolution", "evote - unknown Eternitynode - vin: %s\n", vote.vin.ToString());
-            mnodeman.AskForMN(pfrom, vote.vin);
+            enodeman.AskForMN(pfrom, vote.vin);
             return;
         }
 
@@ -993,7 +993,7 @@ void CEvolutionManager::ProcessMessage(CNode* pfrom, std::string& strCommand, CD
             LogPrintf("evote - signature invalid\n");
             if(eternitynodeSync.IsSynced()) Misbehaving(pfrom->GetId(), 20);
             // it could just be a non-synced Eternitynode
-            mnodeman.AskForMN(pfrom, vote.vin);
+            enodeman.AskForMN(pfrom, vote.vin);
             return;
         }
         
@@ -1051,10 +1051,10 @@ void CEvolutionManager::ProcessMessage(CNode* pfrom, std::string& strCommand, CD
             return;
         }
 
-        CEternitynode* pen = mnodeman.Find(vote.vin);
+        CEternitynode* pen = enodeman.Find(vote.vin);
         if(pen == NULL) {
             LogPrint("enevolution", "fbvote - unknown Eternitynode - vin: %s\n", vote.vin.ToString());
-            mnodeman.AskForMN(pfrom, vote.vin);
+            enodeman.AskForMN(pfrom, vote.vin);
             return;
         }
 
@@ -1063,7 +1063,7 @@ void CEvolutionManager::ProcessMessage(CNode* pfrom, std::string& strCommand, CD
             LogPrintf("fbvote - signature invalid\n");
             if(eternitynodeSync.IsSynced()) Misbehaving(pfrom->GetId(), 20);
             // it could just be a non-synced Eternitynode
-            mnodeman.AskForMN(pfrom, vote.vin);
+            enodeman.AskForMN(pfrom, vote.vin);
             return;
         }
 
@@ -1328,7 +1328,7 @@ CEvolutionProposal::CEvolutionProposal(const CEvolutionProposal& other)
 
 bool CEvolutionProposal::IsValid(std::string& strError, bool fCheckCollateral)
 {
-    if(GetNays() - GetYeas() > mnodeman.CountEnabled(MIN_EVOLUTION_PEER_PROTO_VERSION)/10){
+    if(GetNays() - GetYeas() > enodeman.CountEnabled(MIN_EVOLUTION_PEER_PROTO_VERSION)/10){
          strError = "Active removal";
          return false;
     }
@@ -1372,7 +1372,7 @@ bool CEvolutionProposal::IsValid(std::string& strError, bool fCheckCollateral)
     // nTime not being saved correctly
     // -- TODO: We should keep track of the last time the proposal was valid, if it's invalid for 2 weeks, erase it
     // if(nTime + (60*60*24*2) < GetAdjustedTime()) {
-    //     if(GetYeas()-GetNays() < (mnodeman.CountEnabled(MIN_EVOLUTION_PEER_PROTO_VERSION)/10)) {
+    //     if(GetYeas()-GetNays() < (enodeman.CountEnabled(MIN_EVOLUTION_PEER_PROTO_VERSION)/10)) {
     //         strError = "Not enough support";
     //         return false;
     //     }
@@ -1603,7 +1603,7 @@ bool CEvolutionVote::SignatureValid(bool fSignatureCheck)
     std::string errorMessage;
     std::string strMessage = vin.prevout.ToStringShort() + nProposalHash.ToString() + boost::lexical_cast<std::string>(nVote) + boost::lexical_cast<std::string>(nTime);
 
-    CEternitynode* pen = mnodeman.Find(vin);
+    CEternitynode* pen = enodeman.Find(vin);
 
     if(pen == NULL)
     {
@@ -2005,7 +2005,7 @@ bool CFinalizedEvolutionVote::SignatureValid(bool fSignatureCheck)
 
     std::string strMessage = vin.prevout.ToStringShort() + nEvolutionHash.ToString() + boost::lexical_cast<std::string>(nTime);
 
-    CEternitynode* pen = mnodeman.Find(vin);
+    CEternitynode* pen = enodeman.Find(vin);
 
     if(pen == NULL)
     {

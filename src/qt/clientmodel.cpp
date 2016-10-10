@@ -70,9 +70,9 @@ int ClientModel::getNumConnections(unsigned int flags) const
 
 QString ClientModel::getEternitynodeCountString() const
 {
-    return tr("Total: %1 (SS compatible: %2 / Enabled: %3)").arg(QString::number((int)mnodeman.size()))
-            .arg(QString::number((int)mnodeman.CountEnabled(MIN_POOL_PEER_PROTO_VERSION)))
-            .arg(QString::number((int)mnodeman.CountEnabled()));
+    return tr("Total: %1 (SS compatible: %2 / Enabled: %3)").arg(QString::number((int)enodeman.size()))
+            .arg(QString::number((int)enodeman.CountEnabled(MIN_POOL_PEER_PROTO_VERSION)))
+            .arg(QString::number((int)enodeman.CountEnabled()));
 }
 
 int ClientModel::getNumBlocks() const

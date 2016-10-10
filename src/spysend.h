@@ -186,7 +186,7 @@ public:
 
     bool GetAddress(CService &addr)
     {
-        CEternitynode* pen = mnodeman.Find(vin);
+        CEternitynode* pen = enodeman.Find(vin);
         if(pen != NULL)
         {
             addr = pen->addr;
@@ -198,7 +198,7 @@ public:
     /// Get the protocol version
     bool GetProtocolVersion(int &protocolVersion)
     {
-        CEternitynode* pen = mnodeman.Find(vin);
+        CEternitynode* pen = enodeman.Find(vin);
         if(pen != NULL)
         {
             protocolVersion = pen->protocolVersion;

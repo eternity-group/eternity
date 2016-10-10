@@ -64,7 +64,7 @@ void CSpysendPool::ProcessMessageSpysend(CNode* pfrom, std::string& strCommand, 
         CTransaction txCollateral;
         vRecv >> nDenom >> txCollateral;
 
-        CEternitynode* pen = mnodeman.Find(activeEternitynode.vin);
+        CEternitynode* pen = enodeman.Find(activeEternitynode.vin);
         if(pen == NULL)
         {
             errorID = ERR_MN_LIST;
@@ -74,7 +74,7 @@ void CSpysendPool::ProcessMessageSpysend(CNode* pfrom, std::string& strCommand, 
 
         if(sessionUsers == 0) {
             if(pen->nLastDsq != 0 &&
-                pen->nLastDsq + mnodeman.CountEnabled(MIN_POOL_PEER_PROTO_VERSION)/5 > mnodeman.nDsqCount){
+                pen->nLastDsq + enodeman.CountEnabled(MIN_POOL_PEER_PROTO_VERSION)/5 > enodeman.nDsqCount){
                 LogPrintf("dsa -- last dsq too recent, must wait. %s \n", pfrom->addr.ToString());
                 errorID = ERR_RECENT;
                 pfrom->PushMessage("dssu", sessionID, GetState(), GetEntriesCount(), ETERNITYNODE_REJECTED, errorID);
@@ -110,7 +110,7 @@ void CSpysendPool::ProcessMessageSpysend(CNode* pfrom, std::string& strCommand, 
 
         if(dsq.IsExpired()) return;
 
-        CEternitynode* pen = mnodeman.Find(dsq.vin);
+        CEternitynode* pen = enodeman.Find(dsq.vin);
         if(pen == NULL) return;
 
         // if the queue is ready, submit if we can
@@ -130,15 +130,15 @@ void CSpysendPool::ProcessMessageSpysend(CNode* pfrom, std::string& strCommand, 
                 if(q.vin == dsq.vin) return;
             }
 
-            LogPrint("spysend", "dsq last %d last2 %d count %d\n", pen->nLastDsq, pen->nLastDsq + mnodeman.size()/5, mnodeman.nDsqCount);
+            LogPrint("spysend", "dsq last %d last2 %d count %d\n", pen->nLastDsq, pen->nLastDsq + enodeman.size()/5, enodeman.nDsqCount);
             //don't allow a few nodes to dominate the queuing process
             if(pen->nLastDsq != 0 &&
-                pen->nLastDsq + mnodeman.CountEnabled(MIN_POOL_PEER_PROTO_VERSION)/5 > mnodeman.nDsqCount){
+                pen->nLastDsq + enodeman.CountEnabled(MIN_POOL_PEER_PROTO_VERSION)/5 > enodeman.nDsqCount){
                 LogPrint("spysend", "dsq -- Eternitynode sending too many dsq messages. %s \n", pen->addr.ToString());
                 return;
             }
-            mnodeman.nDsqCount++;
-            pen->nLastDsq = mnodeman.nDsqCount;
+            enodeman.nDsqCount++;
+            pen->nLastDsq = enodeman.nDsqCount;
             pen->allowFreeTx = true;
 
             LogPrint("spysend", "dsq - new Spysend queue object - %s\n", addr.ToString());
@@ -1382,7 +1382,7 @@ bool CSpysendPool::DoAutomaticDenominating(bool fDryRun)
         return false;
     }
 
-    if(mnodeman.size() == 0){
+    if(enodeman.size() == 0){
         LogPrint("spysend", "CSpysendPool::DoAutomaticDenominating - No Eternitynodes detected\n");
         strAutoDenomResult = _("No Eternitynodes detected.");
         return false;
@@ -1494,7 +1494,7 @@ bool CSpysendPool::DoAutomaticDenominating(bool fDryRun)
         }
 
         //if we've used 90% of the Eternitynode list then drop all the oldest first
-        int nThreshold = (int)(mnodeman.CountEnabled(MIN_POOL_PEER_PROTO_VERSION) * 0.9);
+        int nThreshold = (int)(enodeman.CountEnabled(MIN_POOL_PEER_PROTO_VERSION) * 0.9);
         LogPrint("spysend", "Checking vecEternitynodesUsed size %d threshold %d\n", (int)vecEternitynodesUsed.size(), nThreshold);
         while((int)vecEternitynodesUsed.size() > nThreshold){
             vecEternitynodesUsed.erase(vecEternitynodesUsed.begin());
@@ -1537,7 +1537,7 @@ bool CSpysendPool::DoAutomaticDenominating(bool fDryRun)
                     continue;
                 }
 
-                CEternitynode* pen = mnodeman.Find(dsq.vin);
+                CEternitynode* pen = enodeman.Find(dsq.vin);
                 if(pen == NULL)
                 {
                     LogPrintf("DoAutomaticDenominating --- dsq vin %s is not in eternitynode list!", dsq.vin.ToString());
@@ -1576,7 +1576,7 @@ bool CSpysendPool::DoAutomaticDenominating(bool fDryRun)
         // otherwise, try one randomly
         while(i < 10)
         {
-            CEternitynode* pen = mnodeman.FindRandomNotInVec(vecEternitynodesUsed, MIN_POOL_PEER_PROTO_VERSION);
+            CEternitynode* pen = enodeman.FindRandomNotInVec(vecEternitynodesUsed, MIN_POOL_PEER_PROTO_VERSION);
             if(pen == NULL)
             {
                 LogPrintf("DoAutomaticDenominating --- Can't find random eternitynode!\n");
@@ -1585,7 +1585,7 @@ bool CSpysendPool::DoAutomaticDenominating(bool fDryRun)
             }
 
             if(pen->nLastDsq != 0 &&
-                pen->nLastDsq + mnodeman.CountEnabled(MIN_POOL_PEER_PROTO_VERSION)/5 > mnodeman.nDsqCount){
+                pen->nLastDsq + enodeman.CountEnabled(MIN_POOL_PEER_PROTO_VERSION)/5 > enodeman.nDsqCount){
                 i++;
                 continue;
             }
@@ -2157,7 +2157,7 @@ bool CSpysendQueue::Relay()
 
 bool CSpysendQueue::CheckSignature()
 {
-    CEternitynode* pen = mnodeman.Find(vin);
+    CEternitynode* pen = enodeman.Find(vin);
 
     if(pen != NULL)
     {
@@ -2246,8 +2246,8 @@ void ThreadCheckSpySendPool()
 
             if(c % 60 == 0)
             {
-                mnodeman.CheckAndRemove();
-                mnodeman.ProcessEternitynodeConnections();
+                enodeman.CheckAndRemove();
+                enodeman.ProcessEternitynodeConnections();
                 eternitynodePayments.CleanPaymentList();
                 CleanTransactionLocksList();
             }

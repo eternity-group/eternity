@@ -1419,7 +1419,7 @@ bool AppInit2(boost::thread_group& threadGroup)
     uiInterface.InitMessage(_("Loading eternitynode cache..."));
 
     CEternitynodeDB mndb;
-    CEternitynodeDB::ReadResult readResult = mndb.Read(mnodeman);
+    CEternitynodeDB::ReadResult readResult = mndb.Read(enodeman);
     if (readResult == CEternitynodeDB::FileError)
         LogPrintf("Missing eternitynode cache file - encache.dat, will try to recreate\n");
     else if (readResult != CEternitynodeDB::Ok)

@@ -30,7 +30,7 @@ private:
     bool SendEternitynodePing(std::string& errorMessage);
 
     /// Create Eternitynode broadcast, needs to be relayed manually after that
-    bool CreateBroadcast(CTxIn vin, CService service, CKey key, CPubKey pubKey, CKey keyEternitynode, CPubKey pubKeyEternitynode, std::string &errorMessage, CEternitynodeBroadcast &mnb);
+    bool CreateBroadcast(CTxIn vin, CService service, CKey key, CPubKey pubKey, CKey keyEternitynode, CPubKey pubKeyEternitynode, std::string &errorMessage, CEternitynodeBroadcast &enb);
 
     /// Get 1000DRK input that can be used for the Eternitynode
     bool GetEternityNodeVin(CTxIn& vin, CPubKey& pubkey, CKey& secretKey, std::string strTxHash, std::string strOutputIndex);
@@ -58,7 +58,7 @@ public:
     std::string GetStatus();
 
     /// Create Eternitynode broadcast, needs to be relayed manually after that
-    bool CreateBroadcast(std::string strService, std::string strKey, std::string strTxHash, std::string strOutputIndex, std::string& errorMessage, CEternitynodeBroadcast &mnb, bool fOffline = false);
+    bool CreateBroadcast(std::string strService, std::string strKey, std::string strTxHash, std::string strOutputIndex, std::string& errorMessage, CEternitynodeBroadcast &enb, bool fOffline = false);
 
     /// Get 1000DRK input that can be used for the Eternitynode
     bool GetEternityNodeVin(CTxIn& vin, CPubKey& pubkey, CKey& secretKey);

@@ -3960,13 +3960,13 @@ bool static AlreadyHave(const CInv& inv)
         }
         return false;
     case MSG_ETERNITYNODE_ANNOUNCE:
-        if(mnodeman.mapSeenEternitynodeBroadcast.count(inv.hash)) {
+        if(enodeman.mapSeenEternitynodeBroadcast.count(inv.hash)) {
             eternitynodeSync.AddedEternitynodeList(inv.hash);
             return true;
         }
         return false;
     case MSG_ETERNITYNODE_PING:
-        return mnodeman.mapSeenEternitynodePing.count(inv.hash);
+        return enodeman.mapSeenEternitynodePing.count(inv.hash);
     }
     // Don't know what it is, just say we already got one
     return true;
@@ -4154,20 +4154,20 @@ void static ProcessGetData(CNode* pfrom)
                 }
 
                 if (!pushed && inv.type == MSG_ETERNITYNODE_ANNOUNCE) {
-                    if(mnodeman.mapSeenEternitynodeBroadcast.count(inv.hash)){
+                    if(enodeman.mapSeenEternitynodeBroadcast.count(inv.hash)){
                         CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
                         ss.reserve(1000);
-                        ss << mnodeman.mapSeenEternitynodeBroadcast[inv.hash];
-                        pfrom->PushMessage("mnb", ss);
+                        ss << enodeman.mapSeenEternitynodeBroadcast[inv.hash];
+                        pfrom->PushMessage("enb", ss);
                         pushed = true;
                     }
                 }
 
                 if (!pushed && inv.type == MSG_ETERNITYNODE_PING) {
-                    if(mnodeman.mapSeenEternitynodePing.count(inv.hash)){
+                    if(enodeman.mapSeenEternitynodePing.count(inv.hash)){
                         CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
                         ss.reserve(1000);
-                        ss << mnodeman.mapSeenEternitynodePing[inv.hash];
+                        ss << enodeman.mapSeenEternitynodePing[inv.hash];
                         pfrom->PushMessage("mnp", ss);
                         pushed = true;
                     }
@@ -4615,7 +4615,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             //these allow eternitynodes to publish a limited amount of free transactions
             vRecv >> tx >> vin >> vchSig >> sigTime;
 
-            CEternitynode* pen = mnodeman.Find(vin);
+            CEternitynode* pen = enodeman.Find(vin);
             if(pen != NULL)
             {
                 if(!pen->allowFreeTx){
@@ -5063,7 +5063,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     {
         //probably one the extensions
         spySendPool.ProcessMessageSpysend(pfrom, strCommand, vRecv);
-        mnodeman.ProcessMessage(pfrom, strCommand, vRecv);
+        enodeman.ProcessMessage(pfrom, strCommand, vRecv);
         evolution.ProcessMessage(pfrom, strCommand, vRecv);
         eternitynodePayments.ProcessMessageEternitynodePayments(pfrom, strCommand, vRecv);
         ProcessMessageInstantX(pfrom, strCommand, vRecv);

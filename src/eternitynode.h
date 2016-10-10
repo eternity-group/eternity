@@ -15,7 +15,7 @@
 
 #define ETERNITYNODE_MIN_CONFIRMATIONS           15
 #define ETERNITYNODE_MIN_MNP_SECONDS             (10*60)
-#define ETERNITYNODE_MIN_MNB_SECONDS             (5*60)
+#define ETERNITYNODE_MIN_ENB_SECONDS             (5*60)
 #define ETERNITYNODE_PING_SECONDS                (5*60)
 #define ETERNITYNODE_EXPIRATION_SECONDS          (65*60)
 #define ETERNITYNODE_REMOVAL_SECONDS             (75*60)
@@ -41,7 +41,7 @@ public:
 
     CTxIn vin;
     uint256 blockHash;
-    int64_t sigTime; //mnb message times
+    int64_t sigTime; //enb message times
     std::vector<unsigned char> vchSig;
     //removed stop
 
@@ -125,7 +125,7 @@ public:
     CPubKey pubkey2;
     std::vector<unsigned char> sig;
     int activeState;
-    int64_t sigTime; //mnb message time
+    int64_t sigTime; //enb message time
     int cacheInputAge;
     int cacheInputAgeBlock;
     bool unitTest;
@@ -138,7 +138,7 @@ public:
 
     CEternitynode();
     CEternitynode(const CEternitynode& other);
-    CEternitynode(const CEternitynodeBroadcast& mnb);
+    CEternitynode(const CEternitynodeBroadcast& enb);
 
 
     void swap(CEternitynode& first, CEternitynode& second) // nothrow
@@ -208,7 +208,7 @@ public:
 
     int64_t SecondsSincePayment();
 
-    bool UpdateFromNewBroadcast(CEternitynodeBroadcast& mnb);
+    bool UpdateFromNewBroadcast(CEternitynodeBroadcast& enb);
 
     inline uint64_t SliceHash(uint256& hash, int slice)
     {
