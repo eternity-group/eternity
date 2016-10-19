@@ -56,12 +56,13 @@ static void convertSeed6(std::vector<CAddress> &vSeedsOut, const SeedSpec6 *data
 
 static Checkpoints::MapCheckpoints mapCheckpoints =
         boost::assign::map_list_of
-        (  0, uint256("0x00000b602d00ef2d0466aa9156a905f59c6e5944a088782614a90e58089070c4"))
+        (    0, uint256("0x00000b602d00ef2d0466aa9156a905f59c6e5944a088782614a90e58089070c4"))
+	(17247, uint256("0x00000000001a84bc05b8348382b74cc02d990d70688cd6874eeb45279f9cc46c"))
         ;
 static const Checkpoints::CCheckpointData data = {
         &mapCheckpoints,
-        1474140700, // * UNIX timestamp of last checkpoint block
-        0,    // * total number of transactions between genesis and last checkpoint
+        1476872302, // * UNIX timestamp of last checkpoint block
+        23376,    // * total number of transactions between genesis and last checkpoint
               //   (the tx=... number in the SetBestChain debug.log lines)
         2800  // * estimated number of transactions per day after checkpoint
     };
@@ -134,17 +135,27 @@ public:
         assert(genesis.hashMerkleRoot == uint256("0xb35b2551a3dc3c69177dd167ca8faae415bca87b1227aded604d254555044c30"));
 
         vSeeds.push_back(CDNSSeedData("eternity-group.org", "144.76.33.134"));
-		vSeeds.push_back(CDNSSeedData("95.31.211.13", "95.31.211.13"));
-		vSeeds.push_back(CDNSSeedData("92.255.229.121", "92.255.229.121"));
-		vSeeds.push_back(CDNSSeedData("176.215.13.48", "176.215.13.48"));
+	vSeeds.push_back(CDNSSeedData("95.31.211.13", "95.31.211.13"));
+	vSeeds.push_back(CDNSSeedData("92.255.229.121", "92.255.229.121"));
+	vSeeds.push_back(CDNSSeedData("176.215.13.48", "176.215.13.48"));
 
-        base58Prefixes[PUBKEY_ADDRESS] = list_of( 33);                    // Eternity addresses start with 'E'
-        base58Prefixes[SCRIPT_ADDRESS] = list_of(  8);                    // Eternity script addresses start with '4'
-        base58Prefixes[SECRET_KEY] =     list_of(101);                    // Eternity private keys start with 
-        base58Prefixes[EXT_PUBLIC_KEY] = list_of(0x04)(0x88)(0xB2)(0x1E); // Eternity BIP32 pubkeys start with 'xpub'
-        base58Prefixes[EXT_SECRET_KEY] = list_of(0x04)(0x88)(0xAD)(0xE4); // Eternity BIP32 prvkeys start with 'xprv'
-        base58Prefixes[EXT_COIN_TYPE]  = list_of(0x80000005);             // Eternity BIP44 coin type is '5'
 
+	#if __cplusplus > 199711L
+		base58Prefixes[PUBKEY_ADDRESS] = {33};                    // Eternity addresses start with 'E'
+		base58Prefixes[SCRIPT_ADDRESS] = {8};                    // Eternity script addresses start with '4'
+		base58Prefixes[SECRET_KEY] =     {101};                    // Eternity private keys start with 
+		base58Prefixes[EXT_PUBLIC_KEY] = {0x04,0x88,0xB2,0x1E}; // Eternity BIP32 pubkeys start with 'xpub'
+		base58Prefixes[EXT_SECRET_KEY] = {0x04,0x88,0xAD,0xE4}; // Eternity BIP32 prvkeys start with 'xprv'
+		base58Prefixes[EXT_COIN_TYPE]  = {0x05,0x00,0x00,0x80};             // Eternity BIP44 coin type is '5'
+	#else
+		base58Prefixes[PUBKEY_ADDRESS] = list_of( 33);                    // Eternity addresses start with 'E'
+		base58Prefixes[SCRIPT_ADDRESS] = list_of(  8);                    // Eternity script addresses start with '4'
+		base58Prefixes[SECRET_KEY] =     list_of(101);                    // Eternity private keys start with 
+		base58Prefixes[EXT_PUBLIC_KEY] = list_of(0x04)(0x88)(0xB2)(0x1E); // Eternity BIP32 pubkeys start with 'xpub'
+		base58Prefixes[EXT_SECRET_KEY] = list_of(0x04)(0x88)(0xAD)(0xE4); // Eternity BIP32 prvkeys start with 'xprv'
+		base58Prefixes[EXT_COIN_TYPE]  = list_of(0x80000005);             // Eternity BIP44 coin type is '5'
+	#endif
+		
         convertSeed6(vFixedSeeds, pnSeed6_main, ARRAYLEN(pnSeed6_main));
 
         fRequireRPCPassword = true;
@@ -203,14 +214,23 @@ public:
         vSeeds.clear();
 
         vSeeds.push_back(CDNSSeedData("eternity-group.org", "144.76.33.134"));
-
-        base58Prefixes[PUBKEY_ADDRESS] = list_of( 93);                    // Testnet eternity addresses start with 'e'
-        base58Prefixes[SCRIPT_ADDRESS] = list_of( 10);                    // Testnet eternity script addresses start with '8' or '9'
-        base58Prefixes[SECRET_KEY]     = list_of(239);                    // Testnet private keys start with '9' or 'c' (Bitcoin defaults)
-        base58Prefixes[EXT_PUBLIC_KEY] = list_of(0x04)(0x35)(0x87)(0xCF); // Testnet eternity BIP32 pubkeys start with 'tpub'
-        base58Prefixes[EXT_SECRET_KEY] = list_of(0x04)(0x35)(0x83)(0x94); // Testnet eternity BIP32 prvkeys start with 'tprv'
-        base58Prefixes[EXT_COIN_TYPE]  = list_of(0x80000001);             // Testnet eternity BIP44 coin type is '5' (All coin's testnet default)
-
+	#if __cplusplus > 199711L
+		base58Prefixes[PUBKEY_ADDRESS] = {93};                    // Testnet eternity addresses start with 'e'
+		base58Prefixes[SCRIPT_ADDRESS] = {10};                    // Testnet eternity script addresses start with '8' or '9'
+		base58Prefixes[SECRET_KEY]     = {239};                    // Testnet private keys start with '9' or 'c' (Bitcoin defaults)
+		base58Prefixes[EXT_PUBLIC_KEY] = {0x04,0x35,0x87,0xCF}; // Testnet eternity BIP32 pubkeys start with 'tpub'
+		base58Prefixes[EXT_SECRET_KEY] = {0x04,0x35,0x83,0x94}; // Testnet eternity BIP32 prvkeys start with 'tprv'
+		base58Prefixes[EXT_COIN_TYPE]  = {0x01,0x00,0x00,0x80};             // Testnet eternity BIP44 coin type is '5' (All coin's testnet default)
+	#else
+		base58Prefixes[PUBKEY_ADDRESS] = list_of( 93);                    // Testnet eternity addresses start with 'e'
+		base58Prefixes[SCRIPT_ADDRESS] = list_of( 10);                    // Testnet eternity script addresses start with '8' or '9'
+		base58Prefixes[SECRET_KEY]     = list_of(239);                    // Testnet private keys start with '9' or 'c' (Bitcoin defaults)
+		base58Prefixes[EXT_PUBLIC_KEY] = list_of(0x04)(0x35)(0x87)(0xCF); // Testnet eternity BIP32 pubkeys start with 'tpub'
+		base58Prefixes[EXT_SECRET_KEY] = list_of(0x04)(0x35)(0x83)(0x94); // Testnet eternity BIP32 prvkeys start with 'tprv'
+		base58Prefixes[EXT_COIN_TYPE]  = list_of(0x80000001);             // Testnet eternity BIP44 coin type is '5' (All coin's testnet default)		
+	#endif
+		
+		
         convertSeed6(vFixedSeeds, pnSeed6_test, ARRAYLEN(pnSeed6_test));
 
         fRequireRPCPassword = true;
