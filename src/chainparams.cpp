@@ -57,12 +57,13 @@ static void convertSeed6(std::vector<CAddress> &vSeedsOut, const SeedSpec6 *data
 static Checkpoints::MapCheckpoints mapCheckpoints =
         boost::assign::map_list_of
         (    0, uint256("0x00000b602d00ef2d0466aa9156a905f59c6e5944a088782614a90e58089070c4"))
-	(17247, uint256("0x00000000001a84bc05b8348382b74cc02d990d70688cd6874eeb45279f9cc46c"))
+		(17247, uint256("0x00000000001a84bc05b8348382b74cc02d990d70688cd6874eeb45279f9cc46c"))
+		(27335, uint256("0x0000000001ad3bcefe6ae335a03f844cc4d4c6de6711babda26172e26d6b3fb5"))
         ;
 static const Checkpoints::CCheckpointData data = {
         &mapCheckpoints,
-        1476872302, // * UNIX timestamp of last checkpoint block
-        23376,    // * total number of transactions between genesis and last checkpoint
+        1478473947, // * UNIX timestamp of last checkpoint block
+        37667,    // * total number of transactions between genesis and last checkpoint
               //   (the tx=... number in the SetBestChain debug.log lines)
         2800  // * estimated number of transactions per day after checkpoint
     };
@@ -103,7 +104,7 @@ public:
         pchMessageStart[1] = 0xf7;
         pchMessageStart[2] = 0x4d;
         pchMessageStart[3] = 0x2e;
-        vAlertPubKey = ParseHex("04a503e93be1b29e587840df32335b107dfd8a08bd7f8a8710b7e4cb7881e38535239ad0daa03aa1b32c96738f5ee29f725df6b04afd38c2d473d998663c06db7d");
+        vAlertPubKey = ParseHex("04e4f6185c218e4dc6427910b22d144dfe79310f5d0036c0fed23122c3de79d9e025defb443675da809c5b3e56286e7b8b732af93e9aa40b6d9db299cd044f6f06");
         nDefaultPort = 4855;
         bnProofOfWorkLimit = ~uint256(0) >> 20;  // Eternity starting difficulty is 1 / 2^12
         nSubsidyHalvingInterval = 210000;
@@ -135,9 +136,8 @@ public:
         assert(genesis.hashMerkleRoot == uint256("0xb35b2551a3dc3c69177dd167ca8faae415bca87b1227aded604d254555044c30"));
 
         vSeeds.push_back(CDNSSeedData("eternity-group.org", "144.76.33.134"));
-	vSeeds.push_back(CDNSSeedData("95.31.211.13", "95.31.211.13"));
-	vSeeds.push_back(CDNSSeedData("92.255.229.121", "92.255.229.121"));
-	vSeeds.push_back(CDNSSeedData("176.215.13.48", "176.215.13.48"));
+		vSeeds.push_back(CDNSSeedData("95.31.211.13", "95.31.211.13"));
+		vSeeds.push_back(CDNSSeedData("92.255.229.121", "92.255.229.121"));
 
 
 	#if __cplusplus > 199711L
@@ -168,8 +168,8 @@ public:
         fTestnetToBeDeprecatedFieldRPC = false;
 
         nPoolMaxTransactions = 3;
-        strSporkKey = "04bdeb03313acc086c882166f66a4dfa64b765131f350235e2780cca87024735a12561609f391d2791eaf7984fc0bb3f41c82d51d5ac0e29c764ea9fb8dddb6217";
-        strEternitynodePaymentsPubKey = "04bdeb03313acc086c882166f66a4dfa64b765131f350235e2780cca87024735a12561609f391d2791eaf7984fc0bb3f41c82d51d5ac0e29c764ea9fb8dddb6217";
+        strSporkKey = "04e3c7cdbe02a924109f273edb2f6ae3e240e2a08ff0b2b15d84a2729e1ce711e61f70bcf2069f3fad1c40655bb68db3e29563319de2ea3127ecc27acad5e45731";
+        strEternitynodePaymentsPubKey = "04e3c7cdbe02a924109f273edb2f6ae3e240e2a08ff0b2b15d84a2729e1ce711e61f70bcf2069f3fad1c40655bb68db3e29563319de2ea3127ecc27acad5e45731";
         strSpysendPoolDummyAddress = "EVMsMLRzz6YJeLAPodDZdPA5mjCt1GhfYp";
         nStartEternitynodePayments = 1474140700; 
     }
@@ -193,7 +193,7 @@ public:
         pchMessageStart[1] = 0xb3;
         pchMessageStart[2] = 0xea;
         pchMessageStart[3] = 0x5b;
-        vAlertPubKey = ParseHex("040c08e4102239546f2f9634779664058e8f5a0d10ae289e8b404ac8352ee242cddec55d337af29331f0af5c732c50b8da200f6f6f246ce8293e63b49a9f8630fc");
+        vAlertPubKey = ParseHex("04d0687ad5b4f2698eb1ccd2ca46f93decd11efe67642a8a9faf746801cdaea276ddbc5a45932a13ab3abd198d7b8a0522e134d321c32e02da26d2d2071f817be3");
         nDefaultPort = 14855 ;
         nEnforceBlockUpgradeMajority = 51;
         nRejectBlockOutdatedMajority = 75;
@@ -242,8 +242,8 @@ public:
         fTestnetToBeDeprecatedFieldRPC = true;
 
         nPoolMaxTransactions = 2;
-        strSporkKey = "049ffae56340579049f0d276059e4ded3576cf937ee5ce3e27ad84dbfdb4c47bbccf3e07abe5c32354cf970a88304f6f41c5345083a75cb4b12c56041c1425fedb";
-        strEternitynodePaymentsPubKey = "049ffae56340579049f0d276059e4ded3576cf937ee5ce3e27ad84dbfdb4c47bbccf3e07abe5c32354cf970a88304f6f41c5345083a75cb4b12c56041c1425fedb";
+        strSporkKey = "046e67a3b8855c98e6a9fe4412b602afc98bf8720a61588d306aaf5e460038e24995027283768841078d8584e2f5ece25b776e0f5f17e446323e1174bb81345d2b";
+        strEternitynodePaymentsPubKey = "046e67a3b8855c98e6a9fe4412b602afc98bf8720a61588d306aaf5e460038e24995027283768841078d8584e2f5ece25b776e0f5f17e446323e1174bb81345d2b";
         strSpysendPoolDummyAddress = "eWfLe1k5X7eku7K78Ss6VNnastQ4t6y6fE";
         nStartEternitynodePayments = 1474140701; 
     }
