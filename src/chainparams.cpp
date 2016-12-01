@@ -59,11 +59,12 @@ static Checkpoints::MapCheckpoints mapCheckpoints =
         (    0, uint256("0x00000b602d00ef2d0466aa9156a905f59c6e5944a088782614a90e58089070c4"))
 		(17247, uint256("0x00000000001a84bc05b8348382b74cc02d990d70688cd6874eeb45279f9cc46c"))
 		(27335, uint256("0x0000000001ad3bcefe6ae335a03f844cc4d4c6de6711babda26172e26d6b3fb5"))
+		(39710, uint256("0x0000000006dc0a7be7adb3c5147c5783e9750e368f0c0bf2c225573782f40a1f"))
         ;
 static const Checkpoints::CCheckpointData data = {
         &mapCheckpoints,
-        1478473947, // * UNIX timestamp of last checkpoint block
-        37667,    // * total number of transactions between genesis and last checkpoint
+        1480607842, // * UNIX timestamp of last checkpoint block
+        57320,    // * total number of transactions between genesis and last checkpoint
               //   (the tx=... number in the SetBestChain debug.log lines)
         2800  // * estimated number of transactions per day after checkpoint
     };
@@ -135,9 +136,7 @@ public:
         assert(hashGenesisBlock == uint256("0x00000b602d00ef2d0466aa9156a905f59c6e5944a088782614a90e58089070c4"));
         assert(genesis.hashMerkleRoot == uint256("0xb35b2551a3dc3c69177dd167ca8faae415bca87b1227aded604d254555044c30"));
 
-        vSeeds.push_back(CDNSSeedData("eternity-group.org", "144.76.33.134"));
-		vSeeds.push_back(CDNSSeedData("95.31.211.13", "95.31.211.13"));
-		vSeeds.push_back(CDNSSeedData("92.255.229.121", "92.255.229.121"));
+        vSeeds.push_back(CDNSSeedData("eternity-group.org", "dnsseed.eternity-group.org"));
 
 
 	#if __cplusplus > 199711L
