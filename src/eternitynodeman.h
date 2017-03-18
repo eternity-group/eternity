@@ -20,7 +20,7 @@ using namespace std;
 
 class CEternitynodeMan;
 
-extern CEternitynodeMan mnodeman;
+extern CEternitynodeMan enodeman;
 void DumpEternitynodes();
 
 /** Access to the MN database (encache.dat)
@@ -42,8 +42,8 @@ public:
     };
 
     CEternitynodeDB();
-    bool Write(const CEternitynodeMan &mnodemanToSave);
-    ReadResult Read(CEternitynodeMan& mnodemanToLoad, bool fDryRun = false);
+    bool Write(const CEternitynodeMan &enodemanToSave);
+    ReadResult Read(CEternitynodeMan& enodemanToLoad, bool fDryRun = false);
 };
 
 class CEternitynodeMan
@@ -94,7 +94,7 @@ public:
     /// Add an entry
     bool Add(CEternitynode &mn);
 
-    /// Ask (source) node for mnb
+    /// Ask (source) node for enb
     void AskForMN(CNode *pnode, CTxIn &vin);
 
     /// Check all Eternitynodes
@@ -142,9 +142,9 @@ public:
     void Remove(CTxIn vin);
 
     /// Update eternitynode list and maps using provided CEternitynodeBroadcast
-    void UpdateEternitynodeList(CEternitynodeBroadcast mnb);
+    void UpdateEternitynodeList(CEternitynodeBroadcast enb);
     /// Perform complete check and only then update list and maps
-    bool CheckMnbAndUpdateEternitynodeList(CEternitynodeBroadcast mnb, int& nDos);
+    bool CheckEnbAndUpdateEternitynodeList(CEternitynodeBroadcast enb, int& nDos);
 
 };
 

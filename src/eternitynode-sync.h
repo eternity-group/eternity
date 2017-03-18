@@ -28,7 +28,7 @@ extern CEternitynodeSync eternitynodeSync;
 class CEternitynodeSync
 {
 public:
-    std::map<uint256, int> mapSeenSyncMNB;
+    std::map<uint256, int> mapSeenSyncENB;
     std::map<uint256, int> mapSeenSyncENW;
     std::map<uint256, int> mapSeenSyncEvolution;
 

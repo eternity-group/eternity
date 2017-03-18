@@ -299,7 +299,7 @@ void CEternitynodePayments::FillBlockPayee(CMutableTransaction& txNew, int64_t n
     //spork
     if(!eternitynodePayments.GetBlockPayee(pindexPrev->nHeight+1, payee)){
         //no eternitynode detected
-        CEternitynode* winningNode = mnodeman.GetCurrentEternityNode(1);
+        CEternitynode* winningNode = enodeman.GetCurrentEternityNode(1);
         if(winningNode){
             payee = GetScriptForDestination(winningNode->pubkey.GetID());
         } else {
@@ -380,7 +380,7 @@ void CEternitynodePayments::ProcessMessageEternitynodePayments(CNode* pfrom, std
             return;
         }
 
-        int nFirstBlock = nHeight - (mnodeman.CountEnabled()*1.25);
+        int nFirstBlock = nHeight - (enodeman.CountEnabled()*1.25);
         if(winner.nBlockHeight < nFirstBlock || winner.nBlockHeight > nHeight+20){
             LogPrint("enpayments", "enw - winner out of range - FirstBlock %d Height %d bestHeight %d\n", nFirstBlock, winner.nBlockHeight, nHeight);
             return;
@@ -401,7 +401,7 @@ void CEternitynodePayments::ProcessMessageEternitynodePayments(CNode* pfrom, std
             LogPrintf("enw - invalid signature\n");
             if(eternitynodeSync.IsSynced()) Misbehaving(pfrom->GetId(), 20);
             // it could just be a non-synced eternitynode
-            mnodeman.AskForMN(pfrom, winner.vinEternitynode);
+            enodeman.AskForMN(pfrom, winner.vinEternitynode);
             return;
         }
 
@@ -612,7 +612,7 @@ void CEternitynodePayments::CleanPaymentList()
     }
 
     //keep up to five cycles for historical sake
-    int nLimit = std::max(int(mnodeman.size()*1.25), 1000);
+    int nLimit = std::max(int(enodeman.size()*1.25), 1000);
 
     std::map<uint256, CEternitynodePaymentWinner>::iterator it = mapEternitynodePayeeVotes.begin();
     while(it != mapEternitynodePayeeVotes.end()) {
@@ -643,13 +643,13 @@ bool CEternitynodePaymentWinner::IsValid(CNode* pnode, std::string& strError)
 {
     if(IsReferenceNode(vinEternitynode)) return true;
 
-    CEternitynode* pen = mnodeman.Find(vinEternitynode);
+    CEternitynode* pen = enodeman.Find(vinEternitynode);
 
     if(!pen)
     {
         strError = strprintf("Unknown Eternitynode %s", vinEternitynode.prevout.ToStringShort());
         LogPrintf ("CEternitynodePaymentWinner::IsValid - %s\n", strError);
-        mnodeman.AskForMN(pnode, vinEternitynode);
+        enodeman.AskForMN(pnode, vinEternitynode);
         return false;
     }
 
@@ -660,7 +660,7 @@ bool CEternitynodePaymentWinner::IsValid(CNode* pnode, std::string& strError)
         return false;
     }
 
-    int n = mnodeman.GetEternitynodeRank(vinEternitynode, nBlockHeight-100, MIN_ENW_PEER_PROTO_VERSION);
+    int n = enodeman.GetEternitynodeRank(vinEternitynode, nBlockHeight-100, MIN_ENW_PEER_PROTO_VERSION);
 
     if(n > MNPAYMENTS_SIGNATURES_TOTAL)
     {    
@@ -685,7 +685,7 @@ bool CEternitynodePayments::ProcessBlock(int nBlockHeight)
     //reference node - hybrid mode
 
     if(!IsReferenceNode(activeEternitynode.vin)){
-        int n = mnodeman.GetEternitynodeRank(activeEternitynode.vin, nBlockHeight-100, MIN_ENW_PEER_PROTO_VERSION);
+        int n = enodeman.GetEternitynodeRank(activeEternitynode.vin, nBlockHeight-100, MIN_ENW_PEER_PROTO_VERSION);
 
         if(n == -1)
         {
@@ -711,7 +711,7 @@ bool CEternitynodePayments::ProcessBlock(int nBlockHeight)
 
         // pay to the oldest MN that still had no payment but its input is old enough and it was active long enough
         int nCount = 0;
-        CEternitynode *pen = mnodeman.GetNextEternitynodeInQueueForPayment(nBlockHeight, true, nCount);
+        CEternitynode *pen = enodeman.GetNextEternitynodeInQueueForPayment(nBlockHeight, true, nCount);
         
         if(pen != NULL)
         {
@@ -768,7 +768,7 @@ void CEternitynodePaymentWinner::Relay()
 bool CEternitynodePaymentWinner::SignatureValid()
 {
 
-    CEternitynode* pen = mnodeman.Find(vinEternitynode);
+    CEternitynode* pen = enodeman.Find(vinEternitynode);
 
     if(pen != NULL)
     {
@@ -798,7 +798,7 @@ void CEternitynodePayments::Sync(CNode* node, int nCountNeeded)
         nHeight = chainActive.Tip()->nHeight;
     }
 
-    int nCount = (mnodeman.CountEnabled()*1.25);
+    int nCount = (enodeman.CountEnabled()*1.25);
     if(nCountNeeded > nCount) nCountNeeded = nCount;
 
     int nInvCount = 0;

@@ -29,7 +29,7 @@ void CActiveEternitynode::ManageStatus()
 
     if(status == ACTIVE_ETERNITYNODE_INITIAL) {
         CEternitynode *pen;
-        pen = mnodeman.Find(pubKeyEternitynode);
+        pen = enodeman.Find(pubKeyEternitynode);
         if(pen != NULL) {
             pen->Check();
             if(pen->IsEnabled() && pen->protocolVersion == PROTOCOL_VERSION) EnableHotColdEternityNode(pen->vin, pen->addr);
@@ -113,8 +113,8 @@ void CActiveEternitynode::ManageStatus()
                 return;
             }
 
-            CEternitynodeBroadcast mnb;
-            if(!CreateBroadcast(vin, service, keyCollateralAddress, pubKeyCollateralAddress, keyEternitynode, pubKeyEternitynode, errorMessage, mnb)) {
+            CEternitynodeBroadcast enb;
+            if(!CreateBroadcast(vin, service, keyCollateralAddress, pubKeyCollateralAddress, keyEternitynode, pubKeyEternitynode, errorMessage, enb)) {
                 notCapableReason = "Error on CreateBroadcast: " + errorMessage;
                 LogPrintf("Register::ManageStatus() - %s\n", notCapableReason);
                 return;
@@ -122,7 +122,7 @@ void CActiveEternitynode::ManageStatus()
 
             //send to all peers
             LogPrintf("CActiveEternitynode::ManageStatus() - Relay broadcast vin = %s\n", vin.ToString());
-            mnb.Relay();
+            enb.Relay();
 
             LogPrintf("CActiveEternitynode::ManageStatus() - Is capable master node!\n");
             status = ACTIVE_ETERNITYNODE_STARTED;
@@ -177,7 +177,7 @@ bool CActiveEternitynode::SendEternitynodePing(std::string& errorMessage) {
     }
 
     // Update lastPing for our eternitynode in Eternitynode list
-    CEternitynode* pen = mnodeman.Find(vin);
+    CEternitynode* pen = enodeman.Find(vin);
     if(pen != NULL)
     {
         if(pen->IsPingedWithin(ETERNITYNODE_PING_SECONDS, mnp.sigTime)){
@@ -186,12 +186,12 @@ bool CActiveEternitynode::SendEternitynodePing(std::string& errorMessage) {
         }
 
         pen->lastPing = mnp;
-        mnodeman.mapSeenEternitynodePing.insert(make_pair(mnp.GetHash(), mnp));
+        enodeman.mapSeenEternitynodePing.insert(make_pair(mnp.GetHash(), mnp));
 
-        //mnodeman.mapSeenEternitynodeBroadcast.lastPing is probably outdated, so we'll update it
-        CEternitynodeBroadcast mnb(*pen);
-        uint256 hash = mnb.GetHash();
-        if(mnodeman.mapSeenEternitynodeBroadcast.count(hash)) mnodeman.mapSeenEternitynodeBroadcast[hash].lastPing = mnp;
+        //enodeman.mapSeenEternitynodeBroadcast.lastPing is probably outdated, so we'll update it
+        CEternitynodeBroadcast enb(*pen);
+        uint256 hash = enb.GetHash();
+        if(enodeman.mapSeenEternitynodeBroadcast.count(hash)) enodeman.mapSeenEternitynodeBroadcast[hash].lastPing = mnp;
 
         mnp.Relay();
 
@@ -208,7 +208,7 @@ bool CActiveEternitynode::SendEternitynodePing(std::string& errorMessage) {
 
 }
 
-bool CActiveEternitynode::CreateBroadcast(std::string strService, std::string strKeyEternitynode, std::string strTxHash, std::string strOutputIndex, std::string& errorMessage, CEternitynodeBroadcast &mnb, bool fOffline) {
+bool CActiveEternitynode::CreateBroadcast(std::string strService, std::string strKeyEternitynode, std::string strTxHash, std::string strOutputIndex, std::string& errorMessage, CEternitynodeBroadcast &enb, bool fOffline) {
     CTxIn vin;
     CPubKey pubKeyCollateralAddress;
     CKey keyCollateralAddress;
@@ -250,10 +250,10 @@ bool CActiveEternitynode::CreateBroadcast(std::string strService, std::string st
 
     addrman.Add(CAddress(service), CNetAddr("127.0.0.1"), 2*60*60);
 
-    return CreateBroadcast(vin, CService(strService), keyCollateralAddress, pubKeyCollateralAddress, keyEternitynode, pubKeyEternitynode, errorMessage, mnb);
+    return CreateBroadcast(vin, CService(strService), keyCollateralAddress, pubKeyCollateralAddress, keyEternitynode, pubKeyEternitynode, errorMessage, enb);
 }
 
-bool CActiveEternitynode::CreateBroadcast(CTxIn vin, CService service, CKey keyCollateralAddress, CPubKey pubKeyCollateralAddress, CKey keyEternitynode, CPubKey pubKeyEternitynode, std::string &errorMessage, CEternitynodeBroadcast &mnb) {
+bool CActiveEternitynode::CreateBroadcast(CTxIn vin, CService service, CKey keyCollateralAddress, CPubKey pubKeyCollateralAddress, CKey keyEternitynode, CPubKey pubKeyEternitynode, std::string &errorMessage, CEternitynodeBroadcast &enb) {
     // wait for reindex and/or import to finish
     if (fImporting || fReindex) return false;
 
@@ -261,16 +261,16 @@ bool CActiveEternitynode::CreateBroadcast(CTxIn vin, CService service, CKey keyC
     if(!mnp.Sign(keyEternitynode, pubKeyEternitynode)){
         errorMessage = strprintf("Failed to sign ping, vin: %s", vin.ToString());
         LogPrintf("CActiveEternitynode::CreateBroadcast() -  %s\n", errorMessage);
-        mnb = CEternitynodeBroadcast();
+        enb = CEternitynodeBroadcast();
         return false;
     }
 
-    mnb = CEternitynodeBroadcast(service, vin, pubKeyCollateralAddress, pubKeyEternitynode, PROTOCOL_VERSION);
-    mnb.lastPing = mnp;
-    if(!mnb.Sign(keyCollateralAddress)){
+    enb = CEternitynodeBroadcast(service, vin, pubKeyCollateralAddress, pubKeyEternitynode, PROTOCOL_VERSION);
+    enb.lastPing = mnp;
+    if(!enb.Sign(keyCollateralAddress)){
         errorMessage = strprintf("Failed to sign broadcast, vin: %s", vin.ToString());
         LogPrintf("CActiveEternitynode::CreateBroadcast() - %s\n", errorMessage);
-        mnb = CEternitynodeBroadcast();
+        enb = CEternitynodeBroadcast();
         return false;
     }
 

@@ -246,7 +246,7 @@ Value enevolution(const Array& params, bool fHelp)
                 continue;
             }
 
-            CEternitynode* pen = mnodeman.Find(pubKeyEternitynode);
+            CEternitynode* pen = enodeman.Find(pubKeyEternitynode);
             if(pen == NULL)
             {
                 failed++;
@@ -310,7 +310,7 @@ Value enevolution(const Array& params, bool fHelp)
         if(!spySendSigner.SetKey(strEternityNodePrivKey, errorMessage, keyEternitynode, pubKeyEternitynode))
             return "Error upon calling SetKey";
 
-        CEternitynode* pen = mnodeman.Find(activeEternitynode.vin);
+        CEternitynode* pen = enodeman.Find(activeEternitynode.vin);
         if(pen == NULL)
         {
             return "Failure to find eternitynode in list : " + activeEternitynode.vin.ToString();
@@ -533,7 +533,7 @@ Value enevolutionvoteraw(const Array& params, bool fHelp)
     if (fInvalid)
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Malformed base64 encoding");
 
-    CEternitynode* pen = mnodeman.Find(vin);
+    CEternitynode* pen = enodeman.Find(vin);
     if(pen == NULL)
     {
         return "Failure to find eternitynode in list : " + vin.ToString();
@@ -611,7 +611,7 @@ Value mnfinalevolution(const Array& params, bool fHelp)
                 continue;
             }
 
-            CEternitynode* pen = mnodeman.Find(pubKeyEternitynode);
+            CEternitynode* pen = enodeman.Find(pubKeyEternitynode);
             if(pen == NULL)
             {
                 failed++;
@@ -670,7 +670,7 @@ Value mnfinalevolution(const Array& params, bool fHelp)
         if(!spySendSigner.SetKey(strEternityNodePrivKey, errorMessage, keyEternitynode, pubKeyEternitynode))
             return "Error upon calling SetKey";
 
-        CEternitynode* pen = mnodeman.Find(activeEternitynode.vin);
+        CEternitynode* pen = enodeman.Find(activeEternitynode.vin);
         if(pen == NULL)
         {
             return "Failure to find eternitynode in list : " + activeEternitynode.vin.ToString();

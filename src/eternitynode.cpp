@@ -97,23 +97,23 @@ CEternitynode::CEternitynode(const CEternitynode& other)
     lastTimeChecked = 0;
 }
 
-CEternitynode::CEternitynode(const CEternitynodeBroadcast& mnb)
+CEternitynode::CEternitynode(const CEternitynodeBroadcast& enb)
 {
     LOCK(cs);
-    vin = mnb.vin;
-    addr = mnb.addr;
-    pubkey = mnb.pubkey;
-    pubkey2 = mnb.pubkey2;
-    sig = mnb.sig;
+    vin = enb.vin;
+    addr = enb.addr;
+    pubkey = enb.pubkey;
+    pubkey2 = enb.pubkey2;
+    sig = enb.sig;
     activeState = ETERNITYNODE_ENABLED;
-    sigTime = mnb.sigTime;
-    lastPing = mnb.lastPing;
+    sigTime = enb.sigTime;
+    lastPing = enb.lastPing;
     cacheInputAge = 0;
     cacheInputAgeBlock = 0;
     unitTest = false;
     allowFreeTx = true;
-    protocolVersion = mnb.protocolVersion;
-    nLastDsq = mnb.nLastDsq;
+    protocolVersion = enb.protocolVersion;
+    nLastDsq = enb.nLastDsq;
     nScanningErrorCount = 0;
     nLastScanningErrorBlockHeight = 0;
     lastTimeChecked = 0;
@@ -122,19 +122,19 @@ CEternitynode::CEternitynode(const CEternitynodeBroadcast& mnb)
 //
 // When a new eternitynode broadcast is sent, update our information
 //
-bool CEternitynode::UpdateFromNewBroadcast(CEternitynodeBroadcast& mnb)
+bool CEternitynode::UpdateFromNewBroadcast(CEternitynodeBroadcast& enb)
 {
-    if(mnb.sigTime > sigTime) {    
-        pubkey2 = mnb.pubkey2;
-        sigTime = mnb.sigTime;
-        sig = mnb.sig;
-        protocolVersion = mnb.protocolVersion;
-        addr = mnb.addr;
+    if(enb.sigTime > sigTime) {    
+        pubkey2 = enb.pubkey2;
+        sigTime = enb.sigTime;
+        sig = enb.sig;
+        protocolVersion = enb.protocolVersion;
+        addr = enb.addr;
         lastTimeChecked = 0;
         int nDoS = 0;
-        if(mnb.lastPing == CEternitynodePing() || (mnb.lastPing != CEternitynodePing() && mnb.lastPing.CheckAndUpdate(nDoS, false))) {
-            lastPing = mnb.lastPing;
-            mnodeman.mapSeenEternitynodePing.insert(make_pair(lastPing.GetHash(), lastPing));
+        if(enb.lastPing == CEternitynodePing() || (enb.lastPing != CEternitynodePing() && enb.lastPing.CheckAndUpdate(nDoS, false))) {
+            lastPing = enb.lastPing;
+            enodeman.mapSeenEternitynodePing.insert(make_pair(lastPing.GetHash(), lastPing));
         }
         return true;
     }
@@ -252,7 +252,7 @@ int64_t CEternitynode::GetLastPaid() {
 
     const CBlockIndex *BlockReading = chainActive.Tip();
 
-    int nMnCount = mnodeman.CountEnabled()*1.25;
+    int nMnCount = enodeman.CountEnabled()*1.25;
     int n = 0;
     for (unsigned int i = 1; BlockReading && BlockReading->nHeight > 0; i++) {
         if(n >= nMnCount){
@@ -343,13 +343,13 @@ bool CEternitynodeBroadcast::CheckAndUpdate(int& nDos)
 
     // make sure signature isn't in the future (past is OK)
     if (sigTime > GetAdjustedTime() + 60 * 60) {
-        LogPrintf("mnb - Signature rejected, too far into the future %s\n", vin.ToString());
+        LogPrintf("enb - Signature rejected, too far into the future %s\n", vin.ToString());
         nDos = 1;
         return false;
     }
 
     if(protocolVersion < eternitynodePayments.GetMinEternitynodePaymentsProto()) {
-        LogPrintf("mnb - ignoring outdated Eternitynode %s protocol version %d\n", vin.ToString(), protocolVersion);
+        LogPrintf("enb - ignoring outdated Eternitynode %s protocol version %d\n", vin.ToString(), protocolVersion);
         return false;
     }
 
@@ -357,7 +357,7 @@ bool CEternitynodeBroadcast::CheckAndUpdate(int& nDos)
     pubkeyScript = GetScriptForDestination(pubkey.GetID());
 
     if(pubkeyScript.size() != 25) {
-        LogPrintf("mnb - pubkey the wrong size\n");
+        LogPrintf("enb - pubkey the wrong size\n");
         nDos = 100;
         return false;
     }
@@ -366,13 +366,13 @@ bool CEternitynodeBroadcast::CheckAndUpdate(int& nDos)
     pubkeyScript2 = GetScriptForDestination(pubkey2.GetID());
 
     if(pubkeyScript2.size() != 25) {
-        LogPrintf("mnb - pubkey2 the wrong size\n");
+        LogPrintf("enb - pubkey2 the wrong size\n");
         nDos = 100;
         return false;
     }
 
     if(!vin.scriptSig.empty()) {
-        LogPrintf("mnb - Ignore Not Empty ScriptSig %s\n",vin.ToString());
+        LogPrintf("enb - Ignore Not Empty ScriptSig %s\n",vin.ToString());
         return false;
     }
 
@@ -389,7 +389,7 @@ bool CEternitynodeBroadcast::CheckAndUpdate(int& nDos)
         strMessage = addr.ToString(false) + boost::lexical_cast<std::string>(sigTime) +
                         vchPubKey + vchPubKey2 + boost::lexical_cast<std::string>(protocolVersion);
 
-        LogPrint("eternitynode", "mnb - sanitized strMessage: %s, pubkey address: %s, sig: %s\n",
+        LogPrint("eternitynode", "enb - sanitized strMessage: %s, pubkey address: %s, sig: %s\n",
             SanitizeString(strMessage), CBitcoinAddress(pubkey.GetID()).ToString(),
             EncodeBase64(&sig[0], sig.size()));
 
@@ -400,19 +400,19 @@ bool CEternitynodeBroadcast::CheckAndUpdate(int& nDos)
                 strMessage = addr.ToString() + boost::lexical_cast<std::string>(sigTime) +
                                 vchPubKey + vchPubKey2 + boost::lexical_cast<std::string>(protocolVersion);
 
-                LogPrint("eternitynode", "mnb - sanitized strMessage: %s, pubkey address: %s, sig: %s\n",
+                LogPrint("eternitynode", "enb - sanitized strMessage: %s, pubkey address: %s, sig: %s\n",
                     SanitizeString(strMessage), CBitcoinAddress(pubkey.GetID()).ToString(),
                     EncodeBase64(&sig[0], sig.size()));
 
                 if(!spySendSigner.VerifyMessage(pubkey, sig, strMessage, errorMessage)){
                     // didn't work either
-                    LogPrintf("mnb - Got bad Eternitynode address signature, sanitized error: %s\n", SanitizeString(errorMessage));
+                    LogPrintf("enb - Got bad Eternitynode address signature, sanitized error: %s\n", SanitizeString(errorMessage));
                     // there is a bug in old MN signatures, ignore such MN but do not ban the peer we got this from
                     return false;
                 }
             } else {
                 // nope, sig is actually wrong
-                LogPrintf("mnb - Got bad Eternitynode address signature, sanitized error: %s\n", SanitizeString(errorMessage));
+                LogPrintf("enb - Got bad Eternitynode address signature, sanitized error: %s\n", SanitizeString(errorMessage));
                 // there is a bug in old MN signatures, ignore such MN but do not ban the peer we got this from
                 return false;
             }
@@ -422,11 +422,11 @@ bool CEternitynodeBroadcast::CheckAndUpdate(int& nDos)
                         pubkey.GetID().ToString() + pubkey2.GetID().ToString() +
                         boost::lexical_cast<std::string>(protocolVersion);
 
-        LogPrint("eternitynode", "mnb - strMessage: %s, pubkey address: %s, sig: %s\n",
+        LogPrint("eternitynode", "enb - strMessage: %s, pubkey address: %s, sig: %s\n",
             strMessage, CBitcoinAddress(pubkey.GetID()).ToString(), EncodeBase64(&sig[0], sig.size()));
 
         if(!spySendSigner.VerifyMessage(pubkey, sig, strMessage, errorMessage)){
-            LogPrintf("mnb - Got bad Eternitynode address signature, error: %s\n", errorMessage);
+            LogPrintf("enb - Got bad Eternitynode address signature, error: %s\n", errorMessage);
             nDos = 100;
             return false;
         }
@@ -436,8 +436,8 @@ bool CEternitynodeBroadcast::CheckAndUpdate(int& nDos)
         if(addr.GetPort() != 4855) return false;
     } else if(addr.GetPort() == 4855) return false;
 
-    //search existing Eternitynode list, this is where we update existing Eternitynodes with new mnb broadcasts
-    CEternitynode* pen = mnodeman.Find(vin);
+    //search existing Eternitynode list, this is where we update existing Eternitynodes with new enb broadcasts
+    CEternitynode* pen = enodeman.Find(vin);
 
     // no such eternitynode, nothing to update
     if(pen == NULL) return true;
@@ -456,9 +456,9 @@ bool CEternitynodeBroadcast::CheckAndUpdate(int& nDos)
 
     // mn.pubkey = pubkey, IsVinAssociatedWithPubkey is validated once below,
     //   after that they just need to match
-    if(pen->pubkey == pubkey && !pen->IsBroadcastedWithin(ETERNITYNODE_MIN_MNB_SECONDS)) {
+    if(pen->pubkey == pubkey && !pen->IsBroadcastedWithin(ETERNITYNODE_MIN_ENB_SECONDS)) {
         //take the newest entry
-        LogPrintf("mnb - Got updated entry for %s\n", addr.ToString());
+        LogPrintf("enb - Got updated entry for %s\n", addr.ToString());
         if(pen->UpdateFromNewBroadcast((*this))){
             pen->Check();
             if(pen->IsEnabled()) Relay();
@@ -471,7 +471,7 @@ bool CEternitynodeBroadcast::CheckAndUpdate(int& nDos)
 
 bool CEternitynodeBroadcast::CheckInputsAndAdd(int& nDoS)
 {
-    // we are a eternitynode with the same vin (i.e. already activated) and this mnb is ours (matches our Eternitynode privkey)
+    // we are a eternitynode with the same vin (i.e. already activated) and this enb is ours (matches our Eternitynode privkey)
     // so nothing to do here for us
     if(fEternityNode && vin.prevout == activeEternitynode.vin.prevout && pubkey2 == activeEternitynode.pubKeyEternitynode)
         return true;
@@ -481,13 +481,13 @@ bool CEternitynodeBroadcast::CheckInputsAndAdd(int& nDoS)
         return false;
 
     // search existing Eternitynode list
-    CEternitynode* pen = mnodeman.Find(vin);
+    CEternitynode* pen = enodeman.Find(vin);
 
     if(pen != NULL) {
         // nothing to do here if we already know about this eternitynode and it's enabled
         if(pen->IsEnabled()) return true;
         // if it's not enabled, remove old MN first and continue
-        else mnodeman.Remove(pen->vin);
+        else enodeman.Remove(pen->vin);
     }
 
     CValidationState state;
@@ -499,9 +499,9 @@ bool CEternitynodeBroadcast::CheckInputsAndAdd(int& nDoS)
     {
         TRY_LOCK(cs_main, lockMain);
         if(!lockMain) {
-            // not mnb fault, let it to be checked again later
-            mnodeman.mapSeenEternitynodeBroadcast.erase(GetHash());
-            eternitynodeSync.mapSeenSyncMNB.erase(GetHash());
+            // not enb fault, let it to be checked again later
+            enodeman.mapSeenEternitynodeBroadcast.erase(GetHash());
+            eternitynodeSync.mapSeenSyncENB.erase(GetHash());
             return false;
         }
 
@@ -512,13 +512,13 @@ bool CEternitynodeBroadcast::CheckInputsAndAdd(int& nDoS)
         }
     }
 
-    LogPrint("eternitynode", "mnb - Accepted Eternitynode entry\n");
+    LogPrint("eternitynode", "enb - Accepted Eternitynode entry\n");
 
     if(GetInputAge(vin) < ETERNITYNODE_MIN_CONFIRMATIONS){
-        LogPrintf("mnb - Input must have at least %d confirmations\n", ETERNITYNODE_MIN_CONFIRMATIONS);
-        // maybe we miss few blocks, let this mnb to be checked again later
-        mnodeman.mapSeenEternitynodeBroadcast.erase(GetHash());
-        eternitynodeSync.mapSeenSyncMNB.erase(GetHash());
+        LogPrintf("enb - Input must have at least %d confirmations\n", ETERNITYNODE_MIN_CONFIRMATIONS);
+        // maybe we miss few blocks, let this enb to be checked again later
+        enodeman.mapSeenEternitynodeBroadcast.erase(GetHash());
+        eternitynodeSync.mapSeenSyncENB.erase(GetHash());
         return false;
     }
 
@@ -534,15 +534,15 @@ bool CEternitynodeBroadcast::CheckInputsAndAdd(int& nDoS)
         CBlockIndex* pConfIndex = chainActive[pMNIndex->nHeight + ETERNITYNODE_MIN_CONFIRMATIONS - 1]; // block where tx got ETERNITYNODE_MIN_CONFIRMATIONS
         if(pConfIndex->GetBlockTime() > sigTime)
         {
-            LogPrintf("mnb - Bad sigTime %d for Eternitynode %20s %105s (%i conf block is at %d)\n",
+            LogPrintf("enb - Bad sigTime %d for Eternitynode %20s %105s (%i conf block is at %d)\n",
                       sigTime, addr.ToString(), vin.ToString(), ETERNITYNODE_MIN_CONFIRMATIONS, pConfIndex->GetBlockTime());
             return false;
         }
     }
 
-    LogPrintf("mnb - Got NEW Eternitynode entry - %s - %s - %s - %lli \n", GetHash().ToString(), addr.ToString(), vin.ToString(), sigTime);
+    LogPrintf("enb - Got NEW Eternitynode entry - %s - %s - %s - %lli \n", GetHash().ToString(), addr.ToString(), vin.ToString(), sigTime);
     CEternitynode mn(*this);
-    mnodeman.Add(mn);
+    enodeman.Add(mn);
 
     // if it matches our Eternitynode privkey, then we've been remotely activated
     if(pubkey2 == activeEternitynode.pubKeyEternitynode && protocolVersion == PROTOCOL_VERSION){
@@ -665,7 +665,7 @@ bool CEternitynodePing::CheckAndUpdate(int& nDos, bool fRequireEnabled, bool fCh
     }
 
     if(fCheckSigTimeOnly) {
-        CEternitynode* pen = mnodeman.Find(vin);
+        CEternitynode* pen = enodeman.Find(vin);
         if(pen) return VerifySignature(pen->pubkey2, nDos);
         return true;
     }
@@ -673,7 +673,7 @@ bool CEternitynodePing::CheckAndUpdate(int& nDos, bool fRequireEnabled, bool fCh
     LogPrint("eternitynode", "CEternitynodePing::CheckAndUpdate - New Ping - %s - %s - %lli\n", GetHash().ToString(), blockHash.ToString(), sigTime);
 
     // see if we have this Eternitynode
-    CEternitynode* pen = mnodeman.Find(vin);
+    CEternitynode* pen = enodeman.Find(vin);
     if(pen != NULL && pen->protocolVersion >= eternitynodePayments.GetMinEternitynodePaymentsProto())
     {
         if (fRequireEnabled && !pen->IsEnabled()) return false;
@@ -707,11 +707,11 @@ bool CEternitynodePing::CheckAndUpdate(int& nDos, bool fRequireEnabled, bool fCh
 
             pen->lastPing = *this;
 
-            //mnodeman.mapSeenEternitynodeBroadcast.lastPing is probably outdated, so we'll update it
-            CEternitynodeBroadcast mnb(*pen);
-            uint256 hash = mnb.GetHash();
-            if(mnodeman.mapSeenEternitynodeBroadcast.count(hash)) {
-                mnodeman.mapSeenEternitynodeBroadcast[hash].lastPing = *this;
+            //enodeman.mapSeenEternitynodeBroadcast.lastPing is probably outdated, so we'll update it
+            CEternitynodeBroadcast enb(*pen);
+            uint256 hash = enb.GetHash();
+            if(enodeman.mapSeenEternitynodeBroadcast.count(hash)) {
+                enodeman.mapSeenEternitynodeBroadcast[hash].lastPing = *this;
             }
 
             pen->Check(true);

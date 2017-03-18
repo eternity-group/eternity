@@ -85,7 +85,7 @@ bool CSpySendRelay::VerifyMessage(std::string strSharedKey)
 
 void CSpySendRelay::Relay()
 {
-    int nCount = std::min(mnodeman.CountEnabled(MIN_POOL_PEER_PROTO_VERSION), 20);
+    int nCount = std::min(enodeman.CountEnabled(MIN_POOL_PEER_PROTO_VERSION), 20);
     int nRank1 = (rand() % nCount)+1; 
     int nRank2 = (rand() % nCount)+1; 
 
@@ -101,7 +101,7 @@ void CSpySendRelay::Relay()
 
 void CSpySendRelay::RelayThroughNode(int nRank)
 {
-    CEternitynode* pen = mnodeman.GetEternitynodeByRank(nRank, nBlockHeight, MIN_POOL_PEER_PROTO_VERSION);
+    CEternitynode* pen = enodeman.GetEternitynodeByRank(nRank, nBlockHeight, MIN_POOL_PEER_PROTO_VERSION);
 
     if(pen != NULL){
         //printf("RelayThroughNode %s\n", pen->addr.ToString().c_str());
