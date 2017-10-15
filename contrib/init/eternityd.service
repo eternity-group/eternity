@@ -3,13 +3,13 @@ Description=Eternity's distributed currency daemon
 After=network.target
 
 [Service]
-User=eternity
-Group=eternity
+User=eternitycore
+Group=eternitycore
 
 Type=forking
 PIDFile=/var/lib/eternityd/eternityd.pid
 ExecStart=/usr/bin/eternityd -daemon -pid=/var/lib/eternityd/eternityd.pid \
--conf=/etc/eternity/eternity.conf -datadir=/var/lib/eternityd -disablewallet
+-conf=/etc/eternitycore/eternity.conf -datadir=/var/lib/eternityd -disablewallet
 
 Restart=always
 PrivateTmp=true

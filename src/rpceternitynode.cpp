@@ -1,274 +1,239 @@
-// Copyright (c) 2010 Satoshi Nakamoto
-// Copyright (c) 2009-2012 The Bitcoin developers
+// Copyright (c) 2016-2017 The Eternity group Core developers
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "main.h"
-#include "db.h"
-#include "init.h"
 #include "activeeternitynode.h"
-#include "eternitynodeman.h"
+#include "spysend.h"
+#include "init.h"
+#include "main.h"
 #include "eternitynode-payments.h"
-#include "eternitynode-evolution.h"
+#include "eternitynode-sync.h"
 #include "eternitynodeconfig.h"
+#include "eternitynodeman.h"
 #include "rpcserver.h"
+#include "util.h"
 #include "utilmoneystr.h"
 
 #include <fstream>
-using namespace json_spirit;
+#include <iomanip>
+#include <univalue.h>
 
-void SendMoney(const CTxDestination &address, CAmount nValue, CWalletTx& wtxNew, AvailableCoinsType coin_type=ALL_COINS)
+void EnsureWalletIsUnlocked();
+
+UniValue spysend(const UniValue& params, bool fHelp)
 {
-    // Check amount
-    if (nValue <= 0)
-        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid amount");
+    if (fHelp || params.size() != 1)
+        throw std::runtime_error(
+            "spysend \"command\"\n"
+            "\nArguments:\n"
+            "1. \"command\"        (string or set of strings, required) The command to execute\n"
+            "\nAvailable commands:\n"
+            "  start       - Start mixing\n"
+            "  stop        - Stop mixing\n"
+            "  reset       - Reset mixing\n"
+            );
 
-    if (nValue > pwalletMain->GetBalance())
-        throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, "Insufficient funds");
+    if(params[0].get_str() == "start") {
+        {
+            LOCK(pwalletMain->cs_wallet);
+            EnsureWalletIsUnlocked();
+        }
 
-    string strError;
-    if (pwalletMain->IsLocked())
-    {
-        strError = "Error: Wallet locked, unable to create transaction!";
-        LogPrintf("SendMoney() : %s", strError);
-        throw JSONRPCError(RPC_WALLET_ERROR, strError);
-    }
-
-    // Parse Eternity address
-    CScript scriptPubKey = GetScriptForDestination(address);
-
-    // Create and send the transaction
-    CReserveKey reservekey(pwalletMain);
-    CAmount nFeeRequired;
-    if (!pwalletMain->CreateTransaction(scriptPubKey, nValue, wtxNew, reservekey, nFeeRequired, strError, NULL, coin_type))
-    {
-        if (nValue + nFeeRequired > pwalletMain->GetBalance())
-            strError = strprintf("Error: This transaction requires a transaction fee of at least %s because of its amount, complexity, or use of recently received funds!", FormatMoney(nFeeRequired));
-        LogPrintf("SendMoney() : %s\n", strError);
-        throw JSONRPCError(RPC_WALLET_ERROR, strError);
-    }
-    if (!pwalletMain->CommitTransaction(wtxNew, reservekey))
-        throw JSONRPCError(RPC_WALLET_ERROR, "Error: The transaction was rejected! This might happen if some of the coins in your wallet were already spent, such as if you used a copy of wallet.dat and coins were spent in the copy but not marked as spent here.");
-}
-
-Value spysend(const Array& params, bool fHelp)
-{
-    if (fHelp || params.size() == 0)
-        throw runtime_error(
-            "spysend <eternityaddress> <amount>\n"
-            "eternityaddress, reset, or auto (AutoDenominate)"
-            "<amount> is a real and will be rounded to the next 0.1"
-            + HelpRequiringPassphrase());
-
-    if (pwalletMain->IsLocked())
-        throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED, "Error: Please enter the wallet passphrase with walletpassphrase first.");
-
-    if(params[0].get_str() == "auto"){
         if(fEternityNode)
-            return "SpySend is not supported from eternitynodes";
+            return "Mixing is not supported from eternitynodes";
 
-        return "DoAutomaticDenominating " + (spySendPool.DoAutomaticDenominating() ? "successful" : ("failed: " + spySendPool.GetStatus()));
+        fEnableSpySend = true;
+        bool result = spySendPool.DoAutomaticDenominating();
+        return "Mixing " + (result ? "started successfully" : ("start failed: " + spySendPool.GetStatus() + ", will retry"));
     }
 
-    if(params[0].get_str() == "reset"){
-        spySendPool.Reset();
-        return "successfully reset spysend";
+    if(params[0].get_str() == "stop") {
+        fEnableSpySend = false;
+        return "Mixing was stopped";
     }
 
-    if (params.size() != 2)
-        throw runtime_error(
-            "spysend <eternityaddress> <amount>\n"
-            "eternityaddress, denominate, or auto (AutoDenominate)"
-            "<amount> is a real and will be rounded to the next 0.1"
-            + HelpRequiringPassphrase());
+    if(params[0].get_str() == "reset") {
+        spySendPool.ResetPool();
+        return "Mixing was reset";
+    }
 
-    CBitcoinAddress address(params[0].get_str());
-    if (!address.IsValid())
-        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Eternity address");
-
-    // Amount
-    CAmount nAmount = AmountFromValue(params[1]);
-
-    // Wallet comments
-    CWalletTx wtx;
-//    string strError = pwalletMain->SendMoneyToDestination(address.Get(), nAmount, wtx, ONLY_DENOMINATED);
-    SendMoney(address.Get(), nAmount, wtx, ONLY_DENOMINATED);
-//    if (strError != "")
-//        throw JSONRPCError(RPC_WALLET_ERROR, strError);
-
-    return wtx.GetHash().GetHex();
+    return "Unknown command, please see \"help spysend\"";
 }
 
-
-Value getpoolinfo(const Array& params, bool fHelp)
+UniValue getpoolinfo(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() != 0)
-        throw runtime_error(
+        throw std::runtime_error(
             "getpoolinfo\n"
-            "Returns an object containing anonymous pool-related information.");
+            "Returns an object containing mixing pool related information.\n");
 
-    Object obj;
-    obj.push_back(Pair("current_eternitynode",        mnodeman.GetCurrentEternityNode()->addr.ToString()));
-    obj.push_back(Pair("state",        spySendPool.GetState()));
-    obj.push_back(Pair("entries",      spySendPool.GetEntriesCount()));
-    obj.push_back(Pair("entries_accepted",      spySendPool.GetCountEntriesAccepted()));
+    UniValue obj(UniValue::VOBJ);
+    obj.push_back(Pair("state",             spySendPool.GetStateString()));
+    obj.push_back(Pair("mixing_mode",       fSpySendMultiSession ? "multi-session" : "normal"));
+    obj.push_back(Pair("queue",             spySendPool.GetQueueSize()));
+    obj.push_back(Pair("entries",           spySendPool.GetEntriesCount()));
+    obj.push_back(Pair("status",            spySendPool.GetStatus()));
+
+    if (spySendPool.pSubmittedToEternitynode) {
+        obj.push_back(Pair("outpoint",      spySendPool.pSubmittedToEternitynode->vin.prevout.ToStringShort()));
+        obj.push_back(Pair("addr",          spySendPool.pSubmittedToEternitynode->addr.ToString()));
+    }
+
+    if (pwalletMain) {
+        obj.push_back(Pair("keys_left",     pwalletMain->nKeysLeftSinceAutoBackup));
+        obj.push_back(Pair("warnings",      pwalletMain->nKeysLeftSinceAutoBackup < SPYSEND_KEYS_THRESHOLD_WARNING
+                                                ? "WARNING: keypool is almost depleted!" : ""));
+    }
+
     return obj;
 }
 
 
-Value eternitynode(const Array& params, bool fHelp)
+UniValue eternitynode(const UniValue& params, bool fHelp)
 {
-    string strCommand;
-    if (params.size() >= 1)
+    std::string strCommand;
+    if (params.size() >= 1) {
         strCommand = params[0].get_str();
+    }
+
+    if (strCommand == "start-many")
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "DEPRECATED, please use start-all instead");
 
     if (fHelp  ||
-        (strCommand != "start" && strCommand != "start-alias" && strCommand != "start-many" && strCommand != "start-all" && strCommand != "start-missing" &&
-         strCommand != "start-disabled" && strCommand != "list" && strCommand != "list-conf" && strCommand != "count"  && strCommand != "enforce" &&
-        strCommand != "debug" && strCommand != "current" && strCommand != "winners" && strCommand != "genkey" && strCommand != "connect" &&
-        strCommand != "outputs" && strCommand != "status" && strCommand != "calcscore"))
-        throw runtime_error(
-                "eternitynode \"command\"... ( \"passphrase\" )\n"
+        (strCommand != "start" && strCommand != "start-alias" && strCommand != "start-all" && strCommand != "start-missing" &&
+         strCommand != "start-disabled" && strCommand != "list" && strCommand != "list-conf" && strCommand != "count" &&
+         strCommand != "debug" && strCommand != "current" && strCommand != "winner" && strCommand != "winners" && strCommand != "genkey" &&
+         strCommand != "connect" && strCommand != "outputs" && strCommand != "status"))
+            throw std::runtime_error(
+                "eternitynode \"command\"...\n"
                 "Set of commands to execute eternitynode related actions\n"
                 "\nArguments:\n"
                 "1. \"command\"        (string or set of strings, required) The command to execute\n"
-                "2. \"passphrase\"     (string, optional) The wallet passphrase\n"
                 "\nAvailable commands:\n"
-                "  count        - Print number of all known eternitynodes (optional: 'ds', 'enabled', 'all', 'qualify')\n"
-                "  current      - Print info on current eternitynode winner\n"
+                "  count        - Print number of all known eternitynodes (optional: 'ps', 'enabled', 'all', 'qualify')\n"
+                "  current      - Print info on current eternitynode winner to be paid the next block (calculated locally)\n"
                 "  debug        - Print eternitynode status\n"
                 "  genkey       - Generate new eternitynodeprivkey\n"
-                "  enforce      - Enforce eternitynode payments\n"
                 "  outputs      - Print eternitynode compatible outputs\n"
-                "  start        - Start eternitynode configured in eternity.conf\n"
-                "  start-alias  - Start single eternitynode by assigned alias configured in eternitynode.conf\n"
-                "  start-<mode> - Start eternitynodes configured in eternitynode.conf (<mode>: 'all', 'missing', 'disabled')\n"
+                "  start        - Start local Hot eternitynode configured in eternity.conf\n"
+                "  start-alias  - Start single remote eternitynode by assigned alias configured in eternitynode.conf\n"
+                "  start-<mode> - Start remote eternitynodes configured in eternitynode.conf (<mode>: 'all', 'missing', 'disabled')\n"
                 "  status       - Print eternitynode status information\n"
                 "  list         - Print list of all known eternitynodes (see eternitynodelist for more info)\n"
                 "  list-conf    - Print eternitynode.conf in JSON format\n"
+                "  winner       - Print info on next eternitynode winner to vote for\n"
                 "  winners      - Print list of eternitynode winners\n"
                 );
 
     if (strCommand == "list")
     {
-        Array newParams(params.size() - 1);
-        std::copy(params.begin() + 1, params.end(), newParams.begin());
+        UniValue newParams(UniValue::VARR);
+        // forward params but skip "list"
+        for (unsigned int i = 1; i < params.size(); i++) {
+            newParams.push_back(params[i]);
+        }
         return eternitynodelist(newParams, fHelp);
-    }
-
-    if (strCommand == "evolution")
-    {
-        return "Show evolutions";
     }
 
     if(strCommand == "connect")
     {
-        std::string strAddress = "";
-        if (params.size() == 2){
-            strAddress = params[1].get_str();
-        } else {
-            throw runtime_error("Eternitynode address required\n");
-        }
+        if (params.size() < 2)
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Eternitynode address required");
+
+        std::string strAddress = params[1].get_str();
 
         CService addr = CService(strAddress);
 
-        CNode *pnode = ConnectNode((CAddress)addr, NULL, false);
-        if(pnode){
-            pnode->Release();
-            return "successfully connected";
-        } else {
-            throw runtime_error("error connecting\n");
-        }
+        CNode *pnode = ConnectNode((CAddress)addr, NULL);
+        if(!pnode)
+            throw JSONRPCError(RPC_INTERNAL_ERROR, strprintf("Couldn't connect to eternitynode %s", strAddress));
+
+        return "successfully connected";
     }
 
     if (strCommand == "count")
     {
-        if (params.size() > 2){
-            throw runtime_error("too many parameters\n");
-        }
-        if (params.size() == 2)
-        {
-            int nCount = 0;
+        if (params.size() > 2)
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Too many parameters");
 
-            if(chainActive.Tip())
-                mnodeman.GetNextEternitynodeInQueueForPayment(chainActive.Tip()->nHeight, true, nCount);
+        if (params.size() == 1)
+            return mnodeman.size();
 
-            if(params[1] == "ds") return mnodeman.CountEnabled(MIN_POOL_PEER_PROTO_VERSION);
-            if(params[1] == "enabled") return mnodeman.CountEnabled();
-            if(params[1] == "qualify") return nCount;
-            if(params[1] == "all") return strprintf("Total: %d (SS Compatible: %d / Enabled: %d / Qualify: %d)",
-                                                    mnodeman.size(),
-                                                    mnodeman.CountEnabled(MIN_POOL_PEER_PROTO_VERSION),
-                                                    mnodeman.CountEnabled(),
-                                                    nCount);
-        }
-        return mnodeman.size();
+        std::string strMode = params[1].get_str();
+
+        if (strMode == "ps")
+            return mnodeman.CountEnabled(MIN_SPYSEND_PEER_PROTO_VERSION);
+
+        if (strMode == "enabled")
+            return mnodeman.CountEnabled();
+
+        int nCount;
+        mnodeman.GetNextEternitynodeInQueueForPayment(true, nCount);
+
+        if (strMode == "qualify")
+            return nCount;
+
+        if (strMode == "all")
+            return strprintf("Total: %d (SS Compatible: %d / Enabled: %d / Qualify: %d)",
+                mnodeman.size(), mnodeman.CountEnabled(MIN_SPYSEND_PEER_PROTO_VERSION),
+                mnodeman.CountEnabled(), nCount);
     }
 
-    if (strCommand == "current")
+    if (strCommand == "current" || strCommand == "winner")
     {
-        CEternitynode* winner = mnodeman.GetCurrentEternityNode(1);
-        if(winner) {
-            Object obj;
-
-            obj.push_back(Pair("IP:port",       winner->addr.ToString()));
-            obj.push_back(Pair("protocol",      (int64_t)winner->protocolVersion));
-            obj.push_back(Pair("vin",           winner->vin.prevout.hash.ToString()));
-            obj.push_back(Pair("pubkey",        CBitcoinAddress(winner->pubkey.GetID()).ToString()));
-            obj.push_back(Pair("lastseen",      (winner->lastPing == CEternitynodePing()) ? winner->sigTime :
-                                                        (int64_t)winner->lastPing.sigTime));
-            obj.push_back(Pair("activeseconds", (winner->lastPing == CEternitynodePing()) ? 0 :
-                                                        (int64_t)(winner->lastPing.sigTime - winner->sigTime)));
-            return obj;
+        int nCount;
+        int nHeight;
+        CEternitynode* winner = NULL;
+        {
+            LOCK(cs_main);
+            nHeight = chainActive.Height() + (strCommand == "current" ? 1 : 10);
         }
+        mnodeman.UpdateLastPaid();
+        winner = mnodeman.GetNextEternitynodeInQueueForPayment(nHeight, true, nCount);
+        if(!winner) return "unknown";
 
-        return "unknown";
+        UniValue obj(UniValue::VOBJ);
+
+        obj.push_back(Pair("height",        nHeight));
+        obj.push_back(Pair("IP:port",       winner->addr.ToString()));
+        obj.push_back(Pair("protocol",      (int64_t)winner->nProtocolVersion));
+        obj.push_back(Pair("vin",           winner->vin.prevout.ToStringShort()));
+        obj.push_back(Pair("payee",         CBitcoinAddress(winner->pubKeyCollateralAddress.GetID()).ToString()));
+        obj.push_back(Pair("lastseen",      (winner->lastPing == CEternitynodePing()) ? winner->sigTime :
+                                                    winner->lastPing.sigTime));
+        obj.push_back(Pair("activeseconds", (winner->lastPing == CEternitynodePing()) ? 0 :
+                                                    (winner->lastPing.sigTime - winner->sigTime)));
+        return obj;
     }
 
     if (strCommand == "debug")
     {
-        if(activeEternitynode.status != ACTIVE_ETERNITYNODE_INITIAL || !eternitynodeSync.IsSynced())
+        if(activeEternitynode.nState != ACTIVE_ETERNITYNODE_INITIAL || !eternitynodeSync.IsBlockchainSynced())
             return activeEternitynode.GetStatus();
 
-        CTxIn vin = CTxIn();
-        CPubKey pubkey = CScript();
+        CTxIn vin;
+        CPubKey pubkey;
         CKey key;
-        bool found = activeEternitynode.GetEternityNodeVin(vin, pubkey, key);
-        if(!found){
-            throw runtime_error("Missing eternitynode input, please look at the documentation for instructions on eternitynode creation\n");
-        } else {
-            return activeEternitynode.GetStatus();
-        }
-    }
 
-    if(strCommand == "enforce")
-    {
-        return (uint64_t)enforceEternitynodePaymentsTime;
+        if(!pwalletMain || !pwalletMain->GetEternitynodeVinAndKeys(vin, pubkey, key))
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Missing eternitynode input, please look at the documentation for instructions on eternitynode creation");
+
+        return activeEternitynode.GetStatus();
     }
 
     if (strCommand == "start")
     {
-        if(!fEternityNode) throw runtime_error("you must set eternitynode=1 in the configuration\n");
+        if(!fEternityNode)
+            throw JSONRPCError(RPC_INTERNAL_ERROR, "You must set eternitynode=1 in the configuration");
 
-        if(pwalletMain->IsLocked()) {
-            SecureString strWalletPass;
-            strWalletPass.reserve(100);
-
-            if (params.size() == 2){
-                strWalletPass = params[1].get_str().c_str();
-            } else {
-                throw runtime_error("Your wallet is locked, passphrase is required\n");
-            }
-
-            if(!pwalletMain->Unlock(strWalletPass)){
-                throw runtime_error("incorrect passphrase\n");
-            }
+        {
+            LOCK(pwalletMain->cs_wallet);
+            EnsureWalletIsUnlocked();
         }
 
-        if(activeEternitynode.status != ACTIVE_ETERNITYNODE_STARTED){
-            activeEternitynode.status = ACTIVE_ETERNITYNODE_INITIAL; // TODO: consider better way
-            activeEternitynode.ManageStatus();
-            pwalletMain->Lock();
+        if(activeEternitynode.nState != ACTIVE_ETERNITYNODE_STARTED){
+            activeEternitynode.nState = ACTIVE_ETERNITYNODE_INITIAL; // TODO: consider better way
+            activeEternitynode.ManageState();
         }
 
         return activeEternitynode.GetStatus();
@@ -276,132 +241,100 @@ Value eternitynode(const Array& params, bool fHelp)
 
     if (strCommand == "start-alias")
     {
-        if (params.size() < 2){
-            throw runtime_error("command needs at least 2 parameters\n");
+        if (params.size() < 2)
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Please specify an alias");
+
+        {
+            LOCK(pwalletMain->cs_wallet);
+            EnsureWalletIsUnlocked();
         }
 
-        std::string alias = params[1].get_str();
+        std::string strAlias = params[1].get_str();
 
-        if(pwalletMain->IsLocked()) {
-            SecureString strWalletPass;
-            strWalletPass.reserve(100);
+        bool fFound = false;
 
-            if (params.size() == 3){
-                strWalletPass = params[2].get_str().c_str();
-            } else {
-                throw runtime_error("Your wallet is locked, passphrase is required\n");
-            }
-
-            if(!pwalletMain->Unlock(strWalletPass)){
-                throw runtime_error("incorrect passphrase\n");
-            }
-        }
-
-        bool found = false;
-
-        Object statusObj;
-        statusObj.push_back(Pair("alias", alias));
+        UniValue statusObj(UniValue::VOBJ);
+        statusObj.push_back(Pair("alias", strAlias));
 
         BOOST_FOREACH(CEternitynodeConfig::CEternitynodeEntry mne, eternitynodeConfig.getEntries()) {
-            if(mne.getAlias() == alias) {
-                found = true;
-                std::string errorMessage;
+            if(mne.getAlias() == strAlias) {
+                fFound = true;
+                std::string strError;
                 CEternitynodeBroadcast mnb;
 
-                bool result = activeEternitynode.CreateBroadcast(mne.getIp(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), errorMessage, mnb);
+                bool fResult = CEternitynodeBroadcast::Create(mne.getIp(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), strError, mnb);
 
-                statusObj.push_back(Pair("result", result ? "successful" : "failed"));
-                if(result) {
+                statusObj.push_back(Pair("result", fResult ? "successful" : "failed"));
+                if(fResult) {
                     mnodeman.UpdateEternitynodeList(mnb);
                     mnb.Relay();
                 } else {
-                    statusObj.push_back(Pair("errorMessage", errorMessage));
+                    statusObj.push_back(Pair("errorMessage", strError));
                 }
+                mnodeman.NotifyEternitynodeUpdates();
                 break;
             }
         }
 
-        if(!found) {
+        if(!fFound) {
             statusObj.push_back(Pair("result", "failed"));
-            statusObj.push_back(Pair("errorMessage", "could not find alias in config. Verify with list-conf."));
+            statusObj.push_back(Pair("errorMessage", "Could not find alias in config. Verify with list-conf."));
         }
 
-        pwalletMain->Lock();
         return statusObj;
 
     }
 
-    if (strCommand == "start-many" || strCommand == "start-all" || strCommand == "start-missing" || strCommand == "start-disabled")
+    if (strCommand == "start-all" || strCommand == "start-missing" || strCommand == "start-disabled")
     {
-        if(pwalletMain->IsLocked()) {
-            SecureString strWalletPass;
-            strWalletPass.reserve(100);
-
-            if (params.size() == 2){
-                strWalletPass = params[1].get_str().c_str();
-            } else {
-                throw runtime_error("Your wallet is locked, passphrase is required\n");
-            }
-
-            if(!pwalletMain->Unlock(strWalletPass)){
-                throw runtime_error("incorrect passphrase\n");
-            }
+        {
+            LOCK(pwalletMain->cs_wallet);
+            EnsureWalletIsUnlocked();
         }
 
-        if((strCommand == "start-missing" || strCommand == "start-disabled") &&
-         (eternitynodeSync.RequestedEternitynodeAssets <= ETERNITYNODE_SYNC_LIST ||
-          eternitynodeSync.RequestedEternitynodeAssets == ETERNITYNODE_SYNC_FAILED)) {
-            throw runtime_error("You can't use this command until eternitynode list is synced\n");
+        if((strCommand == "start-missing" || strCommand == "start-disabled") && !eternitynodeSync.IsEternitynodeListSynced()) {
+            throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "You can't use this command until eternitynode list is synced");
         }
 
-        std::vector<CEternitynodeConfig::CEternitynodeEntry> mnEntries;
-        mnEntries = eternitynodeConfig.getEntries();
+        int nSuccessful = 0;
+        int nFailed = 0;
 
-        int successful = 0;
-        int failed = 0;
-
-        Object resultsObj;
+        UniValue resultsObj(UniValue::VOBJ);
 
         BOOST_FOREACH(CEternitynodeConfig::CEternitynodeEntry mne, eternitynodeConfig.getEntries()) {
-            std::string errorMessage;
+            std::string strError;
 
-            CTxIn vin = CTxIn(uint256(mne.getTxHash()), uint32_t(atoi(mne.getOutputIndex().c_str())));
-            CEternitynode *pen = mnodeman.Find(vin);
+            CTxIn vin = CTxIn(uint256S(mne.getTxHash()), uint32_t(atoi(mne.getOutputIndex().c_str())));
+            CEternitynode *pmn = mnodeman.Find(vin);
             CEternitynodeBroadcast mnb;
 
-            if(strCommand == "start-missing" && pen) continue;
-            if(strCommand == "start-disabled" && pen && pen->IsEnabled()) continue;
+            if(strCommand == "start-missing" && pmn) continue;
+            if(strCommand == "start-disabled" && pmn && pmn->IsEnabled()) continue;
 
-            bool result = activeEternitynode.CreateBroadcast(mne.getIp(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), errorMessage, mnb);
+            bool fResult = CEternitynodeBroadcast::Create(mne.getIp(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), strError, mnb);
 
-            Object statusObj;
+            UniValue statusObj(UniValue::VOBJ);
             statusObj.push_back(Pair("alias", mne.getAlias()));
-            statusObj.push_back(Pair("result", result ? "successful" : "failed"));
+            statusObj.push_back(Pair("result", fResult ? "successful" : "failed"));
 
-            if(result) {
-                successful++;
+            if (fResult) {
+                nSuccessful++;
                 mnodeman.UpdateEternitynodeList(mnb);
                 mnb.Relay();
             } else {
-                failed++;
-                statusObj.push_back(Pair("errorMessage", errorMessage));
+                nFailed++;
+                statusObj.push_back(Pair("errorMessage", strError));
             }
 
             resultsObj.push_back(Pair("status", statusObj));
         }
-        pwalletMain->Lock();
+        mnodeman.NotifyEternitynodeUpdates();
 
-        Object returnObj;
-        returnObj.push_back(Pair("overall", strprintf("Successfully started %d eternitynodes, failed to start %d, total %d", successful, failed, successful + failed)));
+        UniValue returnObj(UniValue::VOBJ);
+        returnObj.push_back(Pair("overall", strprintf("Successfully started %d eternitynodes, failed to start %d, total %d", nSuccessful, nFailed, nSuccessful + nFailed)));
         returnObj.push_back(Pair("detail", resultsObj));
 
         return returnObj;
-    }
-
-    if (strCommand == "create")
-    {
-
-        throw runtime_error("Not implemented yet, please look at the documentation for instructions on eternitynode creation\n");
     }
 
     if (strCommand == "genkey")
@@ -412,20 +345,17 @@ Value eternitynode(const Array& params, bool fHelp)
         return CBitcoinSecret(secret).ToString();
     }
 
-    if(strCommand == "list-conf")
+    if (strCommand == "list-conf")
     {
-        std::vector<CEternitynodeConfig::CEternitynodeEntry> mnEntries;
-        mnEntries = eternitynodeConfig.getEntries();
-
-        Object resultObj;
+        UniValue resultObj(UniValue::VOBJ);
 
         BOOST_FOREACH(CEternitynodeConfig::CEternitynodeEntry mne, eternitynodeConfig.getEntries()) {
-            CTxIn vin = CTxIn(uint256(mne.getTxHash()), uint32_t(atoi(mne.getOutputIndex().c_str())));
-            CEternitynode *pen = mnodeman.Find(vin);
+            CTxIn vin = CTxIn(uint256S(mne.getTxHash()), uint32_t(atoi(mne.getOutputIndex().c_str())));
+            CEternitynode *pmn = mnodeman.Find(vin);
 
-            std::string strStatus = pen ? pen->Status() : "MISSING";
+            std::string strStatus = pmn ? pmn->GetStatus() : "MISSING";
 
-            Object mnObj;
+            UniValue mnObj(UniValue::VOBJ);
             mnObj.push_back(Pair("alias", mne.getAlias()));
             mnObj.push_back(Pair("address", mne.getIp()));
             mnObj.push_back(Pair("privateKey", mne.getPrivKey()));
@@ -438,12 +368,13 @@ Value eternitynode(const Array& params, bool fHelp)
         return resultObj;
     }
 
-    if (strCommand == "outputs"){
+    if (strCommand == "outputs") {
         // Find possible candidates
-        vector<COutput> possibleCoins = activeEternitynode.SelectCoinsEternitynode();
+        std::vector<COutput> vPossibleCoins;
+        pwalletMain->AvailableCoins(vPossibleCoins, true, NULL, false, ONLY_1000);
 
-        Object obj;
-        BOOST_FOREACH(COutput& out, possibleCoins) {
+        UniValue obj(UniValue::VOBJ);
+        BOOST_FOREACH(COutput& out, vPossibleCoins) {
             obj.push_back(Pair(out.tx->GetHash().ToString(), strprintf("%d", out.i)));
         }
 
@@ -451,73 +382,65 @@ Value eternitynode(const Array& params, bool fHelp)
 
     }
 
-    if(strCommand == "status")
+    if (strCommand == "status")
     {
-        if(!fEternityNode) throw runtime_error("This is not a eternitynode\n");
+        if (!fEternityNode)
+            throw JSONRPCError(RPC_INTERNAL_ERROR, "This is not a eternitynode");
 
-        Object mnObj;
-        CEternitynode *pen = mnodeman.Find(activeEternitynode.vin);
+        UniValue mnObj(UniValue::VOBJ);
 
         mnObj.push_back(Pair("vin", activeEternitynode.vin.ToString()));
         mnObj.push_back(Pair("service", activeEternitynode.service.ToString()));
-        if (pen) mnObj.push_back(Pair("pubkey", CBitcoinAddress(pen->pubkey.GetID()).ToString()));
+
+        CEternitynode mn;
+        if(mnodeman.Get(activeEternitynode.vin, mn)) {
+            mnObj.push_back(Pair("payee", CBitcoinAddress(mn.pubKeyCollateralAddress.GetID()).ToString()));
+        }
+
         mnObj.push_back(Pair("status", activeEternitynode.GetStatus()));
         return mnObj;
     }
 
     if (strCommand == "winners")
     {
-        int nLast = 10;
-
-        if (params.size() >= 2){
-            nLast = atoi(params[1].get_str());
-        }
-
-        Object obj;
-
-        for(int nHeight = chainActive.Tip()->nHeight-nLast; nHeight < chainActive.Tip()->nHeight+20; nHeight++)
+        int nHeight;
         {
-            obj.push_back(Pair(strprintf("%d", nHeight), GetRequiredPaymentsString(nHeight)));
+            LOCK(cs_main);
+            CBlockIndex* pindex = chainActive.Tip();
+            if(!pindex) return NullUniValue;
+
+            nHeight = pindex->nHeight;
         }
-
-        return obj;
-    }
-
-    /*
-        Shows which eternitynode wins by score each block
-    */
-    if (strCommand == "calcscore")
-    {
 
         int nLast = 10;
+        std::string strFilter = "";
 
-        if (params.size() >= 2){
+        if (params.size() >= 2) {
             nLast = atoi(params[1].get_str());
         }
-        Object obj;
 
-        std::vector<CEternitynode> vEternitynodes = mnodeman.GetFullEternitynodeVector();
-        for(int nHeight = chainActive.Tip()->nHeight-nLast; nHeight < chainActive.Tip()->nHeight+20; nHeight++){
-            uint256 nHigh = 0;
-            CEternitynode *pBestEternitynode = NULL;
-            BOOST_FOREACH(CEternitynode& mn, vEternitynodes) {
-                uint256 n = mn.CalculateScore(1, nHeight-100);
-                if(n > nHigh){
-                    nHigh = n;
-                    pBestEternitynode = &mn;
-                }
-            }
-            if(pBestEternitynode)
-                obj.push_back(Pair(strprintf("%d", nHeight), pBestEternitynode->vin.prevout.ToStringShort().c_str()));
+        if (params.size() == 3) {
+            strFilter = params[2].get_str();
+        }
+
+        if (params.size() > 3)
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Correct usage is 'eternitynode winners ( \"count\" \"filter\" )'");
+
+        UniValue obj(UniValue::VOBJ);
+
+        for(int i = nHeight - nLast; i < nHeight + 20; i++) {
+            std::string strPayment = GetRequiredPaymentsString(i);
+            if (strFilter !="" && strPayment.find(strFilter) == std::string::npos) continue;
+            obj.push_back(Pair(strprintf("%d", i), strPayment));
         }
 
         return obj;
     }
 
-    return Value::null;
+    return NullUniValue;
 }
 
-Value eternitynodelist(const Array& params, bool fHelp)
+UniValue eternitynodelist(const UniValue& params, bool fHelp)
 {
     std::string strMode = "status";
     std::string strFilter = "";
@@ -525,97 +448,103 @@ Value eternitynodelist(const Array& params, bool fHelp)
     if (params.size() >= 1) strMode = params[0].get_str();
     if (params.size() == 2) strFilter = params[1].get_str();
 
-    if (fHelp ||
-            (strMode != "status" && strMode != "vin" && strMode != "pubkey" && strMode != "lastseen" && strMode != "activeseconds" && strMode != "rank" && strMode != "addr"
-                && strMode != "protocol" && strMode != "full" && strMode != "lastpaid"))
+    if (fHelp || (
+                strMode != "activeseconds" && strMode != "addr" && strMode != "full" &&
+                strMode != "lastseen" && strMode != "lastpaidtime" && strMode != "lastpaidblock" &&
+                strMode != "protocol" && strMode != "payee" && strMode != "rank" && strMode != "status"))
     {
-        throw runtime_error(
+        throw std::runtime_error(
                 "eternitynodelist ( \"mode\" \"filter\" )\n"
                 "Get a list of eternitynodes in different modes\n"
                 "\nArguments:\n"
                 "1. \"mode\"      (string, optional/required to use filter, defaults = status) The mode to run list in\n"
-                "2. \"filter\"    (string, optional) Filter results. Partial match by IP by default in all modes,\n"
+                "2. \"filter\"    (string, optional) Filter results. Partial match by outpoint by default in all modes,\n"
                 "                                    additional matches in some modes are also available\n"
                 "\nAvailable modes:\n"
                 "  activeseconds  - Print number of seconds eternitynode recognized by the network as enabled\n"
                 "                   (since latest issued \"eternitynode start/start-many/start-alias\")\n"
                 "  addr           - Print ip address associated with a eternitynode (can be additionally filtered, partial match)\n"
-                "  full           - Print info in format 'status protocol pubkey IP lastseen activeseconds lastpaid'\n"
+                "  full           - Print info in format 'status protocol payee lastseen activeseconds lastpaidtime lastpaidblock IP'\n"
                 "                   (can be additionally filtered, partial match)\n"
+                "  lastpaidblock  - Print the last block height a node was paid on the network\n"
+                "  lastpaidtime   - Print the last time a node was paid on the network\n"
                 "  lastseen       - Print timestamp of when a eternitynode was last seen on the network\n"
-                "  lastpaid       - The last time a node was paid on the network\n"
-                "  protocol       - Print protocol of a eternitynode (can be additionally filtered, exact match))\n"
-                "  pubkey         - Print public key associated with a eternitynode (can be additionally filtered,\n"
+                "  payee          - Print Eternity address associated with a eternitynode (can be additionally filtered,\n"
                 "                   partial match)\n"
+                "  protocol       - Print protocol of a eternitynode (can be additionally filtered, exact match))\n"
                 "  rank           - Print rank of a eternitynode based on current block\n"
-                "  status         - Print eternitynode status: ENABLED / EXPIRED / VIN_SPENT / REMOVE / POS_ERROR\n"
-                "                   (can be additionally filtered, partial match)\n"
+                "  status         - Print eternitynode status: PRE_ENABLED / ENABLED / EXPIRED / WATCHDOG_EXPIRED / NEW_START_REQUIRED /\n"
+                "                   UPDATE_REQUIRED / POSE_BAN / OUTPOINT_SPENT (can be additionally filtered, partial match)\n"
                 );
     }
 
-    Object obj;
+    if (strMode == "full" || strMode == "lastpaidtime" || strMode == "lastpaidblock") {
+        mnodeman.UpdateLastPaid();
+    }
+
+    UniValue obj(UniValue::VOBJ);
     if (strMode == "rank") {
-        std::vector<pair<int, CEternitynode> > vEternitynodeRanks = mnodeman.GetEternitynodeRanks(chainActive.Tip()->nHeight);
+        std::vector<std::pair<int, CEternitynode> > vEternitynodeRanks = mnodeman.GetEternitynodeRanks();
         BOOST_FOREACH(PAIRTYPE(int, CEternitynode)& s, vEternitynodeRanks) {
-            std::string strVin = s.second.vin.prevout.ToStringShort();
-            if(strFilter !="" && strVin.find(strFilter) == string::npos) continue;
-            obj.push_back(Pair(strVin,       s.first));
+            std::string strOutpoint = s.second.vin.prevout.ToStringShort();
+            if (strFilter !="" && strOutpoint.find(strFilter) == std::string::npos) continue;
+            obj.push_back(Pair(strOutpoint, s.first));
         }
     } else {
         std::vector<CEternitynode> vEternitynodes = mnodeman.GetFullEternitynodeVector();
         BOOST_FOREACH(CEternitynode& mn, vEternitynodes) {
-            std::string strVin = mn.vin.prevout.ToStringShort();
+            std::string strOutpoint = mn.vin.prevout.ToStringShort();
             if (strMode == "activeseconds") {
-                if(strFilter !="" && strVin.find(strFilter) == string::npos) continue;
-                obj.push_back(Pair(strVin,       (int64_t)(mn.lastPing.sigTime - mn.sigTime)));
+                if (strFilter !="" && strOutpoint.find(strFilter) == std::string::npos) continue;
+                obj.push_back(Pair(strOutpoint, (int64_t)(mn.lastPing.sigTime - mn.sigTime)));
             } else if (strMode == "addr") {
-                if(strFilter !="" && mn.vin.prevout.hash.ToString().find(strFilter) == string::npos &&
-                    strVin.find(strFilter) == string::npos) continue;
-                obj.push_back(Pair(strVin,       mn.addr.ToString()));
+                std::string strAddress = mn.addr.ToString();
+                if (strFilter !="" && strAddress.find(strFilter) == std::string::npos &&
+                    strOutpoint.find(strFilter) == std::string::npos) continue;
+                obj.push_back(Pair(strOutpoint, strAddress));
             } else if (strMode == "full") {
-                std::ostringstream addrStream;
-                addrStream << setw(21) << strVin;
-
-                std::ostringstream stringStream;
-                stringStream << setw(9) <<
-                               mn.Status() << " " <<
-                               mn.protocolVersion << " " <<
-                               CBitcoinAddress(mn.pubkey.GetID()).ToString() << " " << setw(21) <<
-                               mn.addr.ToString() << " " <<
-                               (int64_t)mn.lastPing.sigTime << " " << setw(8) <<
-                               (int64_t)(mn.lastPing.sigTime - mn.sigTime) << " " <<
-                               (int64_t)mn.GetLastPaid();
-                std::string output = stringStream.str();
-                stringStream << " " << strVin;
-                if(strFilter !="" && stringStream.str().find(strFilter) == string::npos &&
-                        strVin.find(strFilter) == string::npos) continue;
-                obj.push_back(Pair(addrStream.str(), output));
+                std::ostringstream streamFull;
+                streamFull << std::setw(18) <<
+                               mn.GetStatus() << " " <<
+                               mn.nProtocolVersion << " " <<
+                               CBitcoinAddress(mn.pubKeyCollateralAddress.GetID()).ToString() << " " <<
+                               (int64_t)mn.lastPing.sigTime << " " << std::setw(8) <<
+                               (int64_t)(mn.lastPing.sigTime - mn.sigTime) << " " << std::setw(10) <<
+                               mn.GetLastPaidTime() << " "  << std::setw(6) <<
+                               mn.GetLastPaidBlock() << " " <<
+                               mn.addr.ToString();
+                std::string strFull = streamFull.str();
+                if (strFilter !="" && strFull.find(strFilter) == std::string::npos &&
+                    strOutpoint.find(strFilter) == std::string::npos) continue;
+                obj.push_back(Pair(strOutpoint, strFull));
+            } else if (strMode == "lastpaidblock") {
+                if (strFilter !="" && strOutpoint.find(strFilter) == std::string::npos) continue;
+                obj.push_back(Pair(strOutpoint, mn.GetLastPaidBlock()));
+            } else if (strMode == "lastpaidtime") {
+                if (strFilter !="" && strOutpoint.find(strFilter) == std::string::npos) continue;
+                obj.push_back(Pair(strOutpoint, mn.GetLastPaidTime()));
             } else if (strMode == "lastseen") {
-                if(strFilter !="" && strVin.find(strFilter) == string::npos) continue;
-                obj.push_back(Pair(strVin,       (int64_t)mn.lastPing.sigTime));
-            } else if (strMode == "lastpaid"){
-                if(strFilter !="" && mn.vin.prevout.hash.ToString().find(strFilter) == string::npos &&
-                    strVin.find(strFilter) == string::npos) continue;
-                obj.push_back(Pair(strVin,      (int64_t)mn.GetLastPaid()));
+                if (strFilter !="" && strOutpoint.find(strFilter) == std::string::npos) continue;
+                obj.push_back(Pair(strOutpoint, (int64_t)mn.lastPing.sigTime));
+            } else if (strMode == "payee") {
+                CBitcoinAddress address(mn.pubKeyCollateralAddress.GetID());
+                std::string strPayee = address.ToString();
+                if (strFilter !="" && strPayee.find(strFilter) == std::string::npos &&
+                    strOutpoint.find(strFilter) == std::string::npos) continue;
+                obj.push_back(Pair(strOutpoint, strPayee));
             } else if (strMode == "protocol") {
-                if(strFilter !="" && strFilter != strprintf("%d", mn.protocolVersion) &&
-                    strVin.find(strFilter) == string::npos) continue;
-                obj.push_back(Pair(strVin,       (int64_t)mn.protocolVersion));
-            } else if (strMode == "pubkey") {
-                CBitcoinAddress address(mn.pubkey.GetID());
-
-                if(strFilter !="" && address.ToString().find(strFilter) == string::npos &&
-                    strVin.find(strFilter) == string::npos) continue;
-                obj.push_back(Pair(strVin,       address.ToString()));
-            } else if(strMode == "status") {
-                std::string strStatus = mn.Status();
-                if(strFilter !="" && strVin.find(strFilter) == string::npos && strStatus.find(strFilter) == string::npos) continue;
-                obj.push_back(Pair(strVin,       strStatus));
+                if (strFilter !="" && strFilter != strprintf("%d", mn.nProtocolVersion) &&
+                    strOutpoint.find(strFilter) == std::string::npos) continue;
+                obj.push_back(Pair(strOutpoint, (int64_t)mn.nProtocolVersion));
+            } else if (strMode == "status") {
+                std::string strStatus = mn.GetStatus();
+                if (strFilter !="" && strStatus.find(strFilter) == std::string::npos &&
+                    strOutpoint.find(strFilter) == std::string::npos) continue;
+                obj.push_back(Pair(strOutpoint, strStatus));
             }
         }
     }
     return obj;
-
 }
 
 bool DecodeHexVecMnb(std::vector<CEternitynodeBroadcast>& vecMnb, std::string strHexMnb) {
@@ -623,7 +552,7 @@ bool DecodeHexVecMnb(std::vector<CEternitynodeBroadcast>& vecMnb, std::string st
     if (!IsHex(strHexMnb))
         return false;
 
-    vector<unsigned char> mnbData(ParseHex(strHexMnb));
+    std::vector<unsigned char> mnbData(ParseHex(strHexMnb));
     CDataStream ssData(mnbData, SER_NETWORK, PROTOCOL_VERSION);
     try {
         ssData >> vecMnb;
@@ -635,26 +564,25 @@ bool DecodeHexVecMnb(std::vector<CEternitynodeBroadcast>& vecMnb, std::string st
     return true;
 }
 
-Value eternitynodebroadcast(const Array& params, bool fHelp)
+UniValue eternitynodebroadcast(const UniValue& params, bool fHelp)
 {
-    string strCommand;
+    std::string strCommand;
     if (params.size() >= 1)
         strCommand = params[0].get_str();
 
     if (fHelp  ||
         (strCommand != "create-alias" && strCommand != "create-all" && strCommand != "decode" && strCommand != "relay"))
-        throw runtime_error(
-                "eternitynodebroadcast \"command\"... ( \"passphrase\" )\n"
+        throw std::runtime_error(
+                "eternitynodebroadcast \"command\"...\n"
                 "Set of commands to create and relay eternitynode broadcast messages\n"
                 "\nArguments:\n"
                 "1. \"command\"        (string or set of strings, required) The command to execute\n"
-                "2. \"passphrase\"     (string, optional) The wallet passphrase\n"
                 "\nAvailable commands:\n"
                 "  create-alias  - Create single remote eternitynode broadcast message by assigned alias configured in eternitynode.conf\n"
                 "  create-all    - Create remote eternitynode broadcast messages for all eternitynodes configured in eternitynode.conf\n"
                 "  decode        - Decode eternitynode broadcast message\n"
                 "  relay         - Relay eternitynode broadcast message to the network\n"
-                + HelpRequiringPassphrase());
+                );
 
     if (strCommand == "create-alias")
     {
@@ -663,59 +591,47 @@ Value eternitynodebroadcast(const Array& params, bool fHelp)
             throw JSONRPCError(RPC_INTERNAL_ERROR, "Wait for reindex and/or import to finish");
 
         if (params.size() < 2)
-            throw JSONRPCError(RPC_INVALID_PARAMETER, "Command needs at least 2 parameters");
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Please specify an alias");
 
-        std::string alias = params[1].get_str();
-
-        if(pwalletMain->IsLocked()) {
-            SecureString strWalletPass;
-            strWalletPass.reserve(100);
-
-            if (params.size() == 3){
-                strWalletPass = params[2].get_str().c_str();
-            } else {
-                throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED, "Your wallet is locked, passphrase is required");
-            }
- 
-            if(!pwalletMain->Unlock(strWalletPass)){
-                throw JSONRPCError(RPC_WALLET_PASSPHRASE_INCORRECT, "The wallet passphrase entered was incorrect");
-            }
+        {
+            LOCK(pwalletMain->cs_wallet);
+            EnsureWalletIsUnlocked();
         }
 
-        bool found = false;
+        bool fFound = false;
+        std::string strAlias = params[1].get_str();
 
-        Object statusObj;
+        UniValue statusObj(UniValue::VOBJ);
         std::vector<CEternitynodeBroadcast> vecMnb;
 
-        statusObj.push_back(Pair("alias", alias));
+        statusObj.push_back(Pair("alias", strAlias));
 
         BOOST_FOREACH(CEternitynodeConfig::CEternitynodeEntry mne, eternitynodeConfig.getEntries()) {
-            if(mne.getAlias() == alias) {
-                found = true;
-                std::string errorMessage;
+            if(mne.getAlias() == strAlias) {
+                fFound = true;
+                std::string strError;
                 CEternitynodeBroadcast mnb;
 
-                bool result = activeEternitynode.CreateBroadcast(mne.getIp(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), errorMessage, mnb, true);
+                bool fResult = CEternitynodeBroadcast::Create(mne.getIp(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), strError, mnb, true);
 
-                statusObj.push_back(Pair("result", result ? "successful" : "failed"));
-                if(result) {
+                statusObj.push_back(Pair("result", fResult ? "successful" : "failed"));
+                if(fResult) {
                     vecMnb.push_back(mnb);
                     CDataStream ssVecMnb(SER_NETWORK, PROTOCOL_VERSION);
                     ssVecMnb << vecMnb;
                     statusObj.push_back(Pair("hex", HexStr(ssVecMnb.begin(), ssVecMnb.end())));
                 } else {
-                    statusObj.push_back(Pair("errorMessage", errorMessage));
+                    statusObj.push_back(Pair("errorMessage", strError));
                 }
                 break;
             }
         }
 
-        if(!found) {
+        if(!fFound) {
             statusObj.push_back(Pair("result", "not found"));
             statusObj.push_back(Pair("errorMessage", "Could not find alias in config. Verify with list-conf."));
         }
 
-        pwalletMain->Lock();
         return statusObj;
 
     }
@@ -726,58 +642,45 @@ Value eternitynodebroadcast(const Array& params, bool fHelp)
         if (fImporting || fReindex)
             throw JSONRPCError(RPC_INTERNAL_ERROR, "Wait for reindex and/or import to finish");
 
-        if(pwalletMain->IsLocked()) {
-            SecureString strWalletPass;
-            strWalletPass.reserve(100);
-
-            if (params.size() == 2){
-                strWalletPass = params[1].get_str().c_str();
-            } else {
-                throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED, "Your wallet is locked, passphrase is required");
-            }
-
-            if(!pwalletMain->Unlock(strWalletPass)){
-                throw JSONRPCError(RPC_WALLET_PASSPHRASE_INCORRECT, "The wallet passphrase entered was incorrect");
-            }
+        {
+            LOCK(pwalletMain->cs_wallet);
+            EnsureWalletIsUnlocked();
         }
 
         std::vector<CEternitynodeConfig::CEternitynodeEntry> mnEntries;
         mnEntries = eternitynodeConfig.getEntries();
 
-        int successful = 0;
-        int failed = 0;
+        int nSuccessful = 0;
+        int nFailed = 0;
 
-        Object resultsObj;
+        UniValue resultsObj(UniValue::VOBJ);
         std::vector<CEternitynodeBroadcast> vecMnb;
 
         BOOST_FOREACH(CEternitynodeConfig::CEternitynodeEntry mne, eternitynodeConfig.getEntries()) {
-            std::string errorMessage;
-
-            CTxIn vin = CTxIn(uint256(mne.getTxHash()), uint32_t(atoi(mne.getOutputIndex().c_str())));
+            std::string strError;
             CEternitynodeBroadcast mnb;
 
-            bool result = activeEternitynode.CreateBroadcast(mne.getIp(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), errorMessage, mnb, true);
+            bool fResult = CEternitynodeBroadcast::Create(mne.getIp(), mne.getPrivKey(), mne.getTxHash(), mne.getOutputIndex(), strError, mnb, true);
 
-            Object statusObj;
+            UniValue statusObj(UniValue::VOBJ);
             statusObj.push_back(Pair("alias", mne.getAlias()));
-            statusObj.push_back(Pair("result", result ? "successful" : "failed"));
+            statusObj.push_back(Pair("result", fResult ? "successful" : "failed"));
 
-            if(result) {
-                successful++;
+            if(fResult) {
+                nSuccessful++;
                 vecMnb.push_back(mnb);
             } else {
-                failed++;
-                statusObj.push_back(Pair("errorMessage", errorMessage));
+                nFailed++;
+                statusObj.push_back(Pair("errorMessage", strError));
             }
 
             resultsObj.push_back(Pair("status", statusObj));
         }
-        pwalletMain->Lock();
 
         CDataStream ssVecMnb(SER_NETWORK, PROTOCOL_VERSION);
         ssVecMnb << vecMnb;
-        Object returnObj;
-        returnObj.push_back(Pair("overall", strprintf("Successfully created broadcast messages for %d eternitynodes, failed to create %d, total %d", successful, failed, successful + failed)));
+        UniValue returnObj(UniValue::VOBJ);
+        returnObj.push_back(Pair("overall", strprintf("Successfully created broadcast messages for %d eternitynodes, failed to create %d, total %d", nSuccessful, nFailed, nSuccessful + nFailed)));
         returnObj.push_back(Pair("detail", resultsObj));
         returnObj.push_back(Pair("hex", HexStr(ssVecMnb.begin(), ssVecMnb.end())));
 
@@ -789,30 +692,31 @@ Value eternitynodebroadcast(const Array& params, bool fHelp)
         if (params.size() != 2)
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Correct usage is 'eternitynodebroadcast decode \"hexstring\"'");
 
-        int successful = 0;
-        int failed = 0;
-
         std::vector<CEternitynodeBroadcast> vecMnb;
-        Object returnObj;
 
         if (!DecodeHexVecMnb(vecMnb, params[1].get_str()))
             throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Eternitynode broadcast message decode failed");
 
-        BOOST_FOREACH(CEternitynodeBroadcast& mnb, vecMnb) {
-            Object resultObj;
+        int nSuccessful = 0;
+        int nFailed = 0;
+        int nDos = 0;
+        UniValue returnObj(UniValue::VOBJ);
 
-            if(mnb.VerifySignature()) {
-                successful++;
+        BOOST_FOREACH(CEternitynodeBroadcast& mnb, vecMnb) {
+            UniValue resultObj(UniValue::VOBJ);
+
+            if(mnb.CheckSignature(nDos)) {
+                nSuccessful++;
                 resultObj.push_back(Pair("vin", mnb.vin.ToString()));
                 resultObj.push_back(Pair("addr", mnb.addr.ToString()));
-                resultObj.push_back(Pair("pubkey", CBitcoinAddress(mnb.pubkey.GetID()).ToString()));
-                resultObj.push_back(Pair("pubkey2", CBitcoinAddress(mnb.pubkey2.GetID()).ToString()));
-                resultObj.push_back(Pair("vchSig", EncodeBase64(&mnb.sig[0], mnb.sig.size())));
+                resultObj.push_back(Pair("pubKeyCollateralAddress", CBitcoinAddress(mnb.pubKeyCollateralAddress.GetID()).ToString()));
+                resultObj.push_back(Pair("pubKeyEternitynode", CBitcoinAddress(mnb.pubKeyEternitynode.GetID()).ToString()));
+                resultObj.push_back(Pair("vchSig", EncodeBase64(&mnb.vchSig[0], mnb.vchSig.size())));
                 resultObj.push_back(Pair("sigTime", mnb.sigTime));
-                resultObj.push_back(Pair("protocolVersion", mnb.protocolVersion));
+                resultObj.push_back(Pair("protocolVersion", mnb.nProtocolVersion));
                 resultObj.push_back(Pair("nLastDsq", mnb.nLastDsq));
 
-                Object lastPingObj;
+                UniValue lastPingObj(UniValue::VOBJ);
                 lastPingObj.push_back(Pair("vin", mnb.lastPing.vin.ToString()));
                 lastPingObj.push_back(Pair("blockHash", mnb.lastPing.blockHash.ToString()));
                 lastPingObj.push_back(Pair("sigTime", mnb.lastPing.sigTime));
@@ -820,14 +724,14 @@ Value eternitynodebroadcast(const Array& params, bool fHelp)
 
                 resultObj.push_back(Pair("lastPing", lastPingObj));
             } else {
-                failed++;
+                nFailed++;
                 resultObj.push_back(Pair("errorMessage", "Eternitynode broadcast signature verification failed"));
             }
 
             returnObj.push_back(Pair(mnb.GetHash().ToString(), resultObj));
         }
 
-        returnObj.push_back(Pair("overall", strprintf("Successfully decoded broadcast messages for %d eternitynodes, failed to decode %d, total %d", successful, failed, successful + failed)));
+        returnObj.push_back(Pair("overall", strprintf("Successfully decoded broadcast messages for %d eternitynodes, failed to decode %d, total %d", nSuccessful, nFailed, nSuccessful + nFailed)));
 
         return returnObj;
     }
@@ -840,52 +744,51 @@ Value eternitynodebroadcast(const Array& params, bool fHelp)
                                                         "1. \"hex\"      (string, required) Broadcast messages hex string\n"
                                                         "2. fast       (string, optional) If none, using safe method\n");
 
-        int successful = 0;
-        int failed = 0;
-        bool fSafe = params.size() == 2;
-
         std::vector<CEternitynodeBroadcast> vecMnb;
-        Object returnObj;
 
         if (!DecodeHexVecMnb(vecMnb, params[1].get_str()))
             throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Eternitynode broadcast message decode failed");
 
+        int nSuccessful = 0;
+        int nFailed = 0;
+        bool fSafe = params.size() == 2;
+        UniValue returnObj(UniValue::VOBJ);
+
         // verify all signatures first, bailout if any of them broken
         BOOST_FOREACH(CEternitynodeBroadcast& mnb, vecMnb) {
-            Object resultObj;
+            UniValue resultObj(UniValue::VOBJ);
 
             resultObj.push_back(Pair("vin", mnb.vin.ToString()));
             resultObj.push_back(Pair("addr", mnb.addr.ToString()));
 
             int nDos = 0;
             bool fResult;
-            if (mnb.VerifySignature()) {
+            if (mnb.CheckSignature(nDos)) {
                 if (fSafe) {
-                    fResult = mnodeman.CheckMnbAndUpdateEternitynodeList(mnb, nDos);
+                    fResult = mnodeman.CheckMnbAndUpdateEternitynodeList(NULL, mnb, nDos);
                 } else {
                     mnodeman.UpdateEternitynodeList(mnb);
                     mnb.Relay();
                     fResult = true;
                 }
+                mnodeman.NotifyEternitynodeUpdates();
             } else fResult = false;
 
             if(fResult) {
-                successful++;
-                mnodeman.UpdateEternitynodeList(mnb);
-                mnb.Relay();
+                nSuccessful++;
                 resultObj.push_back(Pair(mnb.GetHash().ToString(), "successful"));
             } else {
-                failed++;
+                nFailed++;
                 resultObj.push_back(Pair("errorMessage", "Eternitynode broadcast signature verification failed"));
             }
 
             returnObj.push_back(Pair(mnb.GetHash().ToString(), resultObj));
         }
 
-        returnObj.push_back(Pair("overall", strprintf("Successfully relayed broadcast messages for %d eternitynodes, failed to relay %d, total %d", successful, failed, successful + failed)));
+        returnObj.push_back(Pair("overall", strprintf("Successfully relayed broadcast messages for %d eternitynodes, failed to relay %d, total %d", nSuccessful, nFailed, nSuccessful + nFailed)));
 
         return returnObj;
     }
 
-    return Value::null;
+    return NullUniValue;
 }

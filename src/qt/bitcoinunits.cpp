@@ -1,6 +1,6 @@
-// Copyright (c) 2011-2014 The Bitcoin developers
-// Copyright (c) 2016 The Eternity developers
-// Distributed under the MIT/X11 software license, see the accompanying
+// Copyright (c) 2011-2015 The Bitcoin Core developers
+// Copyright (c) 2016-2017 The Eternity group Core developers
+// Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "bitcoinunits.h"
@@ -22,7 +22,7 @@ QList<BitcoinUnits::Unit> BitcoinUnits::availableUnits()
     unitlist.append(ENT);
     unitlist.append(mENT);
     unitlist.append(uENT);
-    unitlist.append(nENT);
+    unitlist.append(duffs);
     return unitlist;
 }
 
@@ -33,35 +33,23 @@ bool BitcoinUnits::valid(int unit)
     case ENT:
     case mENT:
     case uENT:
-    case nENT:
+    case duffs:
         return true;
     default:
         return false;
     }
 }
 
-QString BitcoinUnits::id(int unit)
-{
-    switch(unit)
-    {
-        case ENT: return QString("eternity");
-        case mENT: return QString("meternity");
-        case uENT: return QString::fromUtf8("ueternity");
-        case nENT: return QString("nENT");
-        default: return QString("???");
-    }
-}
-
 QString BitcoinUnits::name(int unit)
 {
-    if(Params().NetworkID() == CBaseChainParams::MAIN)
+    if(Params().NetworkIDString() == CBaseChainParams::MAIN)
     {
         switch(unit)
         {
             case ENT: return QString("ENT");
             case mENT: return QString("mENT");
             case uENT: return QString::fromUtf8("μENT");
-            case nENT: return QString("nENT");
+            case duffs: return QString("duffs");
             default: return QString("???");
         }
     }
@@ -72,7 +60,7 @@ QString BitcoinUnits::name(int unit)
             case ENT: return QString("tENT");
             case mENT: return QString("mtENT");
             case uENT: return QString::fromUtf8("μtENT");
-            case nENT: return QString("tnENT");
+            case duffs: return QString("tduffs");
             default: return QString("???");
         }
     }
@@ -80,14 +68,14 @@ QString BitcoinUnits::name(int unit)
 
 QString BitcoinUnits::description(int unit)
 {
-    if(Params().NetworkID() == CBaseChainParams::MAIN)
+    if(Params().NetworkIDString() == CBaseChainParams::MAIN)
     {
         switch(unit)
         {
             case ENT: return QString("Eternity");
             case mENT: return QString("Milli-Eternity (1 / 1" THIN_SP_UTF8 "000)");
             case uENT: return QString("Micro-Eternity (1 / 1" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
-            case nENT: return QString("Ten Nano-Eternity (1 / 100" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
+            case duffs: return QString("Ten Nano-Eternity (1 / 100" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
             default: return QString("???");
         }
     }
@@ -98,7 +86,7 @@ QString BitcoinUnits::description(int unit)
             case ENT: return QString("TestEternitys");
             case mENT: return QString("Milli-TestEternity (1 / 1" THIN_SP_UTF8 "000)");
             case uENT: return QString("Micro-TestEternity (1 / 1" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
-            case nENT: return QString("Ten Nano-TestEternity (1 / 100" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
+            case duffs: return QString("Ten Nano-TestEternity (1 / 100" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
             default: return QString("???");
         }
     }
@@ -111,7 +99,7 @@ qint64 BitcoinUnits::factor(int unit)
     case ENT:  return 100000000;
     case mENT: return 100000;
     case uENT: return 100;
-    case nENT: return 1;
+    case duffs: return 1;
     default:   return 100000000;
     }
 }
@@ -123,7 +111,7 @@ int BitcoinUnits::decimals(int unit)
     case ENT: return 8;
     case mENT: return 5;
     case uENT: return 2;
-    case nENT: return 0;
+    case duffs: return 0;
     default: return 0;
     }
 }
@@ -162,13 +150,6 @@ QString BitcoinUnits::format(int unit, const CAmount& nIn, bool fPlus, Separator
     return quotient_str + QString(".") + remainder_str;
 }
 
-
-// TODO: Review all remaining calls to BitcoinUnits::formatWithUnit to
-// TODO: determine whether the output is used in a plain text context
-// TODO: or an HTML context (and replace with
-// TODO: BtcoinUnits::formatHtmlWithUnit in the latter case). Hopefully
-// TODO: there aren't instances where the result could be used in
-// TODO: either context.
 
 // NOTE: Using formatWithUnit in an HTML context risks wrapping
 // quantities at the thousands separator. More subtly, it also results

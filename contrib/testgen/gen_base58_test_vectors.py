@@ -15,11 +15,11 @@ import random
 from binascii import b2a_hex
 
 # key types
-PUBKEY_ADDRESS = 76
-SCRIPT_ADDRESS = 16
-PUBKEY_ADDRESS_TEST = 139
-SCRIPT_ADDRESS_TEST = 19
-PRIVKEY = 204
+PUBKEY_ADDRESS = 33
+SCRIPT_ADDRESS = 8
+PUBKEY_ADDRESS_TEST = 93
+SCRIPT_ADDRESS_TEST = 10
+PRIVKEY = 101
 PRIVKEY_TEST = 239
 
 metadata_keys = ['isPrivkey', 'isTestnet', 'addrType', 'isCompressed']

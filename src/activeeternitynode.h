@@ -1,71 +1,78 @@
-// Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2012 The Bitcoin developers
+// Copyright (c) 2016-2017 The Eternity group Core developers
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
 #ifndef ACTIVEETERNITYNODE_H
 #define ACTIVEETERNITYNODE_H
 
-#include "sync.h"
 #include "net.h"
 #include "key.h"
-#include "init.h"
-#include "wallet.h"
-#include "spysend.h"
-#include "eternitynode.h"
+#include "wallet/wallet.h"
 
-#define ACTIVE_ETERNITYNODE_INITIAL                     0 // initial state
-#define ACTIVE_ETERNITYNODE_SYNC_IN_PROCESS             1
-#define ACTIVE_ETERNITYNODE_INPUT_TOO_NEW               2
-#define ACTIVE_ETERNITYNODE_NOT_CAPABLE                 3
-#define ACTIVE_ETERNITYNODE_STARTED                     4
+class CActiveEternitynode;
+
+static const int ACTIVE_ETERNITYNODE_INITIAL          = 0; // initial state
+static const int ACTIVE_ETERNITYNODE_SYNC_IN_PROCESS  = 1;
+static const int ACTIVE_ETERNITYNODE_INPUT_TOO_NEW    = 2;
+static const int ACTIVE_ETERNITYNODE_NOT_CAPABLE      = 3;
+static const int ACTIVE_ETERNITYNODE_STARTED          = 4;
+
+extern CActiveEternitynode activeEternitynode;
 
 // Responsible for activating the Eternitynode and pinging the network
 class CActiveEternitynode
 {
+public:
+    enum eternitynode_type_enum_t {
+        ETERNITYNODE_UNKNOWN = 0,
+        ETERNITYNODE_REMOTE  = 1,
+        ETERNITYNODE_LOCAL   = 2
+    };
+
 private:
     // critical section to protect the inner data structures
     mutable CCriticalSection cs;
 
+    eternitynode_type_enum_t eType;
+
+    bool fPingerEnabled;
+
     /// Ping Eternitynode
-    bool SendEternitynodePing(std::string& errorMessage);
-
-    /// Create Eternitynode broadcast, needs to be relayed manually after that
-    bool CreateBroadcast(CTxIn vin, CService service, CKey key, CPubKey pubKey, CKey keyEternitynode, CPubKey pubKeyEternitynode, std::string &errorMessage, CEternitynodeBroadcast &mnb);
-
-    /// Get 1000DRK input that can be used for the Eternitynode
-    bool GetEternityNodeVin(CTxIn& vin, CPubKey& pubkey, CKey& secretKey, std::string strTxHash, std::string strOutputIndex);
-    bool GetVinFromOutput(COutput out, CTxIn& vin, CPubKey& pubkey, CKey& secretKey);
+    bool SendEternitynodePing();
 
 public:
-	// Initialized by init.cpp
-	// Keys for the main Eternitynode
-	CPubKey pubKeyEternitynode;
+    // Keys for the active Eternitynode
+    CPubKey pubKeyEternitynode;
+    CKey keyEternitynode;
 
-	// Initialized while registering Eternitynode
-	CTxIn vin;
+    // Initialized while registering Eternitynode
+    CTxIn vin;
     CService service;
 
-    int status;
-    std::string notCapableReason;
+    int nState; // should be one of ACTIVE_ETERNITYNODE_XXXX
+    std::string strNotCapableReason;
 
     CActiveEternitynode()
-    {        
-        status = ACTIVE_ETERNITYNODE_INITIAL;
-    }
+        : eType(ETERNITYNODE_UNKNOWN),
+          fPingerEnabled(false),
+          pubKeyEternitynode(),
+          keyEternitynode(),
+          vin(),
+          service(),
+          nState(ACTIVE_ETERNITYNODE_INITIAL)
+    {}
 
-    /// Manage status of main Eternitynode
-    void ManageStatus(); 
-    std::string GetStatus();
+    /// Manage state of active Eternitynode
+    void ManageState();
 
-    /// Create Eternitynode broadcast, needs to be relayed manually after that
-    bool CreateBroadcast(std::string strService, std::string strKey, std::string strTxHash, std::string strOutputIndex, std::string& errorMessage, CEternitynodeBroadcast &mnb, bool fOffline = false);
+    std::string GetStateString() const;
+    std::string GetStatus() const;
+    std::string GetTypeString() const;
 
-    /// Get 1000DRK input that can be used for the Eternitynode
-    bool GetEternityNodeVin(CTxIn& vin, CPubKey& pubkey, CKey& secretKey);
-    vector<COutput> SelectCoinsEternitynode();
-
-    /// Enable cold wallet mode (run a Eternitynode with no funds)
-    bool EnableHotColdEternityNode(CTxIn& vin, CService& addr);
+private:
+    void ManageStateInitial();
+    void ManageStateRemote();
+    void ManageStateLocal();
 };
 
 #endif

@@ -2,10 +2,10 @@
 #include "ui_spysendconfig.h"
 
 #include "bitcoinunits.h"
+#include "spysend.h"
 #include "guiconstants.h"
 #include "optionsmodel.h"
 #include "walletmodel.h"
-#include "init.h"
 
 #include <QMessageBox>
 #include <QPushButton>
@@ -40,9 +40,9 @@ void SpysendConfig::clickBasic()
 
     QString strAmount(BitcoinUnits::formatWithUnit(
         model->getOptionsModel()->getDisplayUnit(), 1000 * COIN));
-    QMessageBox::information(this, tr("Spysend Configuration"),
+    QMessageBox::information(this, tr("SpySend Configuration"),
         tr(
-            "Spysend was successfully set to basic (%1 and 2 rounds). You can change this at any time by opening Eternity's configuration screen."
+            "SpySend was successfully set to basic (%1 and 2 rounds). You can change this at any time by opening Eternity's configuration screen."
         ).arg(strAmount)
     );
 
@@ -55,9 +55,9 @@ void SpysendConfig::clickHigh()
 
     QString strAmount(BitcoinUnits::formatWithUnit(
         model->getOptionsModel()->getDisplayUnit(), 1000 * COIN));
-    QMessageBox::information(this, tr("Spysend Configuration"),
+    QMessageBox::information(this, tr("SpySend Configuration"),
         tr(
-            "Spysend was successfully set to high (%1 and 8 rounds). You can change this at any time by opening Eternity's configuration screen."
+            "SpySend was successfully set to high (%1 and 8 rounds). You can change this at any time by opening Eternity's configuration screen."
         ).arg(strAmount)
     );
 
@@ -70,9 +70,9 @@ void SpysendConfig::clickMax()
 
     QString strAmount(BitcoinUnits::formatWithUnit(
         model->getOptionsModel()->getDisplayUnit(), 1000 * COIN));
-    QMessageBox::information(this, tr("Spysend Configuration"),
+    QMessageBox::information(this, tr("SpySend Configuration"),
         tr(
-            "Spysend was successfully set to maximum (%1 and 16 rounds). You can change this at any time by opening Eternity's configuration screen."
+            "SpySend was successfully set to maximum (%1 and 16 rounds). You can change this at any time by opening Eternity's configuration screen."
         ).arg(strAmount)
     );
 
@@ -83,9 +83,9 @@ void SpysendConfig::configure(bool enabled, int coins, int rounds) {
 
     QSettings settings;
 
-    settings.setValue("nSpysendRounds", rounds);
-    settings.setValue("nAnonymizeEternityAmount", coins);
+    settings.setValue("nSpySendRounds", rounds);
+    settings.setValue("nSpySendAmount", coins);
 
-    nSpysendRounds = rounds;
-    nAnonymizeEternityAmount = coins;
+    nSpySendRounds = rounds;
+    nSpySendAmount = coins;
 }
