@@ -1,6 +1,6 @@
 usr/local/bin/eternity-qt usr/bin
-share/pixmaps/bitcoin32.xpm usr/share/pixmaps
-share/pixmaps/bitcoin16.xpm usr/share/pixmaps
-share/pixmaps/bitcoin128.png usr/share/pixmaps
+share/pixmaps/eternity32.xpm usr/share/pixmaps
+share/pixmaps/eternity16.xpm usr/share/pixmaps
+share/pixmaps/eternity128.png usr/share/pixmaps
 debian/eternity-qt.desktop usr/share/applications
 debian/eternity-qt.protocol usr/share/kde4/services/

@@ -1,7 +1,7 @@
 # /etc/conf.d/eternityd: config file for /etc/init.d/eternityd
 
 # Config file location
-#BITCOIND_CONFIGFILE="/etc/eternity/eternity.conf"
+#BITCOIND_CONFIGFILE="/etc/eternitycore/eternity.conf"
 
 # What directory to write pidfile to?  (created and owned by $BITCOIND_USER)
 #BITCOIND_PIDDIR="/var/run/eternityd"
@@ -13,8 +13,8 @@
 #BITCOIND_DATADIR="/var/lib/eternityd"
 
 # User and group to own eternityd process
-#BITCOIND_USER="eternity"
-#BITCOIND_GROUP="eternity"
+#BITCOIND_USER="eternitycore"
+#BITCOIND_GROUP="eternitycore"
 
 # Path to eternityd executable
 #BITCOIND_BIN="/usr/bin/eternityd"
@@ -25,3 +25,9 @@
 # Additional options (avoid -conf and -datadir, use flags above)
 BITCOIND_OPTS="-disablewallet"
 
+# The timeout in seconds OpenRC will wait for bitcoind to terminate
+# after a SIGTERM has been raised.
+# Note that this will be mapped as argument to start-stop-daemon's
+# '--retry' option, which means you can specify a retry schedule
+# here. For more information see man 8 start-stop-daemon.
+BITCOIND_SIGTERM_TIMEOUT=60

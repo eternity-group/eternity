@@ -1,16 +1,10 @@
 
-// Copyright (c) 2016 The Eternity developers
+// Copyright (c) 2016-2017 The Eternity group Core developers
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef SRC_ETERNITYNODECONFIG_H_
 #define SRC_ETERNITYNODECONFIG_H_
-
-#include <string>
-#include <vector>
-
-#include <boost/filesystem.hpp>
-#include <boost/filesystem/fstream.hpp>
 
 class CEternitynodeConfig;
 extern CEternitynodeConfig eternitynodeConfig;
@@ -92,11 +86,7 @@ public:
     }
 
     int getCount() {
-        int c = -1;
-        BOOST_FOREACH(CEternitynodeEntry e, entries) {
-            if(e.getAlias() != "") c++;
-        }
-        return c;
+        return (int)entries.size();
     }
 
 private:

@@ -1,2 +1,3 @@
 debian/manpages/eternityd.1
 debian/manpages/eternity.conf.5
+debian/manpages/eternity-cli.1

@@ -1,408 +1,316 @@
+// Copyright (c) 2016-2017 The Eternity group Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "addrman.h"
-#include "protocol.h"
 #include "activeeternitynode.h"
-#include "eternitynodeman.h"
 #include "eternitynode.h"
-#include "eternitynodeconfig.h"
-#include "spork.h"
+#include "eternitynode-sync.h"
+#include "eternitynodeman.h"
+#include "protocol.h"
 
-//
-// Bootup the Eternitynode, look for a 1000DRK input and register on the network
-//
-void CActiveEternitynode::ManageStatus()
-{    
-    std::string errorMessage;
+extern CWallet* pwalletMain;
 
-    if(!fEternityNode) return;
+// Keep track of the active Eternitynode
+CActiveEternitynode activeEternitynode;
 
-    if (fDebug) LogPrintf("CActiveEternitynode::ManageStatus() - Begin\n");
-
-    //need correct blocks to send ping
-    if(Params().NetworkID() != CBaseChainParams::REGTEST && !eternitynodeSync.IsBlockchainSynced()) {
-        status = ACTIVE_ETERNITYNODE_SYNC_IN_PROCESS;
-        LogPrintf("CActiveEternitynode::ManageStatus() - %s\n", GetStatus());
+void CActiveEternitynode::ManageState()
+{
+    LogPrint("eternitynode", "CActiveEternitynode::ManageState -- Start\n");
+    if(!fEternityNode) {
+        LogPrint("eternitynode", "CActiveEternitynode::ManageState -- Not a eternitynode, returning\n");
         return;
     }
 
-    if(status == ACTIVE_ETERNITYNODE_SYNC_IN_PROCESS) status = ACTIVE_ETERNITYNODE_INITIAL;
-
-    if(status == ACTIVE_ETERNITYNODE_INITIAL) {
-        CEternitynode *pen;
-        pen = mnodeman.Find(pubKeyEternitynode);
-        if(pen != NULL) {
-            pen->Check();
-            if(pen->IsEnabled() && pen->protocolVersion == PROTOCOL_VERSION) EnableHotColdEternityNode(pen->vin, pen->addr);
-        }
+    if(Params().NetworkIDString() != CBaseChainParams::REGTEST && !eternitynodeSync.IsBlockchainSynced()) {
+        nState = ACTIVE_ETERNITYNODE_SYNC_IN_PROCESS;
+        LogPrintf("CActiveEternitynode::ManageState -- %s: %s\n", GetStateString(), GetStatus());
+        return;
     }
 
-    if(status != ACTIVE_ETERNITYNODE_STARTED) {
-
-        // Set defaults
-        status = ACTIVE_ETERNITYNODE_NOT_CAPABLE;
-        notCapableReason = "";
-
-        if(pwalletMain->IsLocked()){
-            notCapableReason = "Wallet is locked.";
-            LogPrintf("CActiveEternitynode::ManageStatus() - not capable: %s\n", notCapableReason);
-            return;
-        }
-
-        if(pwalletMain->GetBalance() == 0){
-            notCapableReason = "Hot node, waiting for remote activation.";
-            LogPrintf("CActiveEternitynode::ManageStatus() - not capable: %s\n", notCapableReason);
-            return;
-        }
-
-        if(strEternityNodeAddr.empty()) {
-            if(!GetLocal(service)) {
-                notCapableReason = "Can't detect external address. Please use the eternitynodeaddr configuration option.";
-                LogPrintf("CActiveEternitynode::ManageStatus() - not capable: %s\n", notCapableReason);
-                return;
-            }
-        } else {
-            service = CService(strEternityNodeAddr);
-        }
-
-        if(Params().NetworkID() == CBaseChainParams::MAIN) {
-            if(service.GetPort() != 4855) {
-                notCapableReason = strprintf("Invalid port: %u - only 4855 is supported on mainnet.", service.GetPort());
-                LogPrintf("CActiveEternitynode::ManageStatus() - not capable: %s\n", notCapableReason);
-                return;
-            }
-        } else if(service.GetPort() == 4855) {
-            notCapableReason = strprintf("Invalid port: %u - 4855 is only supported on mainnet.", service.GetPort());
-            LogPrintf("CActiveEternitynode::ManageStatus() - not capable: %s\n", notCapableReason);
-            return;
-        }
-
-        LogPrintf("CActiveEternitynode::ManageStatus() - Checking inbound connection to '%s'\n", service.ToString());
-
-        CNode *pnode = ConnectNode((CAddress)service, NULL, false);
-        if(!pnode){
-            notCapableReason = "Could not connect to " + service.ToString();
-            LogPrintf("CActiveEternitynode::ManageStatus() - not capable: %s\n", notCapableReason);
-            return;
-        }
-        pnode->Release();
-
-        // Choose coins to use
-        CPubKey pubKeyCollateralAddress;
-        CKey keyCollateralAddress;
-
-        if(GetEternityNodeVin(vin, pubKeyCollateralAddress, keyCollateralAddress)) {
-
-            if(GetInputAge(vin) < ETERNITYNODE_MIN_CONFIRMATIONS){
-                status = ACTIVE_ETERNITYNODE_INPUT_TOO_NEW;
-                notCapableReason = strprintf("%s - %d confirmations", GetStatus(), GetInputAge(vin));
-                LogPrintf("CActiveEternitynode::ManageStatus() - %s\n", notCapableReason);
-                return;
-            }
-
-            LOCK(pwalletMain->cs_wallet);
-            pwalletMain->LockCoin(vin.prevout);
-
-            // send to all nodes
-            CPubKey pubKeyEternitynode;
-            CKey keyEternitynode;
-
-            if(!spySendSigner.SetKey(strEternityNodePrivKey, errorMessage, keyEternitynode, pubKeyEternitynode))
-            {
-                notCapableReason = "Error upon calling SetKey: " + errorMessage;
-                LogPrintf("Register::ManageStatus() - %s\n", notCapableReason);
-                return;
-            }
-
-            CEternitynodeBroadcast mnb;
-            if(!CreateBroadcast(vin, service, keyCollateralAddress, pubKeyCollateralAddress, keyEternitynode, pubKeyEternitynode, errorMessage, mnb)) {
-                notCapableReason = "Error on CreateBroadcast: " + errorMessage;
-                LogPrintf("Register::ManageStatus() - %s\n", notCapableReason);
-                return;
-            }
-
-            //send to all peers
-            LogPrintf("CActiveEternitynode::ManageStatus() - Relay broadcast vin = %s\n", vin.ToString());
-            mnb.Relay();
-
-            LogPrintf("CActiveEternitynode::ManageStatus() - Is capable master node!\n");
-            status = ACTIVE_ETERNITYNODE_STARTED;
-
-            return;
-        } else {
-            notCapableReason = "Could not find suitable coins!";
-            LogPrintf("CActiveEternitynode::ManageStatus() - %s\n", notCapableReason);
-            return;
-        }
+    if(nState == ACTIVE_ETERNITYNODE_SYNC_IN_PROCESS) {
+        nState = ACTIVE_ETERNITYNODE_INITIAL;
     }
 
-    //send to all peers
-    if(!SendEternitynodePing(errorMessage)) {
-        LogPrintf("CActiveEternitynode::ManageStatus() - Error on Ping: %s\n", errorMessage);
+    LogPrint("eternitynode", "CActiveEternitynode::ManageState -- status = %s, type = %s, pinger enabled = %d\n", GetStatus(), GetTypeString(), fPingerEnabled);
+
+    if(eType == ETERNITYNODE_UNKNOWN) {
+        ManageStateInitial();
+    }
+
+    if(eType == ETERNITYNODE_REMOTE) {
+        ManageStateRemote();
+    } else if(eType == ETERNITYNODE_LOCAL) {
+        // Try Remote Start first so the started local eternitynode can be restarted without recreate eternitynode broadcast.
+        ManageStateRemote();
+        if(nState != ACTIVE_ETERNITYNODE_STARTED)
+            ManageStateLocal();
+    }
+
+    SendEternitynodePing();
+}
+
+std::string CActiveEternitynode::GetStateString() const
+{
+    switch (nState) {
+        case ACTIVE_ETERNITYNODE_INITIAL:         return "INITIAL";
+        case ACTIVE_ETERNITYNODE_SYNC_IN_PROCESS: return "SYNC_IN_PROCESS";
+        case ACTIVE_ETERNITYNODE_INPUT_TOO_NEW:   return "INPUT_TOO_NEW";
+        case ACTIVE_ETERNITYNODE_NOT_CAPABLE:     return "NOT_CAPABLE";
+        case ACTIVE_ETERNITYNODE_STARTED:         return "STARTED";
+        default:                                return "UNKNOWN";
     }
 }
 
-std::string CActiveEternitynode::GetStatus() {
-    switch (status) {
-    case ACTIVE_ETERNITYNODE_INITIAL: return "Node just started, not yet activated";
-    case ACTIVE_ETERNITYNODE_SYNC_IN_PROCESS: return "Sync in progress. Must wait until sync is complete to start Eternitynode";
-    case ACTIVE_ETERNITYNODE_INPUT_TOO_NEW: return strprintf("Eternitynode input must have at least %d confirmations", ETERNITYNODE_MIN_CONFIRMATIONS);
-    case ACTIVE_ETERNITYNODE_NOT_CAPABLE: return "Not capable eternitynode: " + notCapableReason;
-    case ACTIVE_ETERNITYNODE_STARTED: return "Eternitynode successfully started";
-    default: return "unknown";
+std::string CActiveEternitynode::GetStatus() const
+{
+    switch (nState) {
+        case ACTIVE_ETERNITYNODE_INITIAL:         return "Node just started, not yet activated";
+        case ACTIVE_ETERNITYNODE_SYNC_IN_PROCESS: return "Sync in progress. Must wait until sync is complete to start Eternitynode";
+        case ACTIVE_ETERNITYNODE_INPUT_TOO_NEW:   return strprintf("Eternitynode input must have at least %d confirmations", Params().GetConsensus().nEternitynodeMinimumConfirmations);
+        case ACTIVE_ETERNITYNODE_NOT_CAPABLE:     return "Not capable eternitynode: " + strNotCapableReason;
+        case ACTIVE_ETERNITYNODE_STARTED:         return "Eternitynode successfully started";
+        default:                                return "Unknown";
     }
 }
 
-bool CActiveEternitynode::SendEternitynodePing(std::string& errorMessage) {
-    if(status != ACTIVE_ETERNITYNODE_STARTED) {
-        errorMessage = "Eternitynode is not in a running status";
+std::string CActiveEternitynode::GetTypeString() const
+{
+    std::string strType;
+    switch(eType) {
+    case ETERNITYNODE_UNKNOWN:
+        strType = "UNKNOWN";
+        break;
+    case ETERNITYNODE_REMOTE:
+        strType = "REMOTE";
+        break;
+    case ETERNITYNODE_LOCAL:
+        strType = "LOCAL";
+        break;
+    default:
+        strType = "UNKNOWN";
+        break;
+    }
+    return strType;
+}
+
+bool CActiveEternitynode::SendEternitynodePing()
+{
+    if(!fPingerEnabled) {
+        LogPrint("eternitynode", "CActiveEternitynode::SendEternitynodePing -- %s: eternitynode ping service is disabled, skipping...\n", GetStateString());
         return false;
     }
 
-    CPubKey pubKeyEternitynode;
-    CKey keyEternitynode;
-
-    if(!spySendSigner.SetKey(strEternityNodePrivKey, errorMessage, keyEternitynode, pubKeyEternitynode))
-    {
-        errorMessage = strprintf("Error upon calling SetKey: %s\n", errorMessage);
+    if(!mnodeman.Has(vin)) {
+        strNotCapableReason = "Eternitynode not in eternitynode list";
+        nState = ACTIVE_ETERNITYNODE_NOT_CAPABLE;
+        LogPrintf("CActiveEternitynode::SendEternitynodePing -- %s: %s\n", GetStateString(), strNotCapableReason);
         return false;
     }
 
-    LogPrintf("CActiveEternitynode::SendEternitynodePing() - Relay Eternitynode Ping vin = %s\n", vin.ToString());
-    
     CEternitynodePing mnp(vin);
-    if(!mnp.Sign(keyEternitynode, pubKeyEternitynode))
-    {
-        errorMessage = "Couldn't sign Eternitynode Ping";
+    if(!mnp.Sign(keyEternitynode, pubKeyEternitynode)) {
+        LogPrintf("CActiveEternitynode::SendEternitynodePing -- ERROR: Couldn't sign Eternitynode Ping\n");
         return false;
     }
 
     // Update lastPing for our eternitynode in Eternitynode list
-    CEternitynode* pen = mnodeman.Find(vin);
-    if(pen != NULL)
-    {
-        if(pen->IsPingedWithin(ETERNITYNODE_PING_SECONDS, mnp.sigTime)){
-            errorMessage = "Too early to send Eternitynode Ping";
-            return false;
-        }
-
-        pen->lastPing = mnp;
-        mnodeman.mapSeenEternitynodePing.insert(make_pair(mnp.GetHash(), mnp));
-
-        //mnodeman.mapSeenEternitynodeBroadcast.lastPing is probably outdated, so we'll update it
-        CEternitynodeBroadcast mnb(*pen);
-        uint256 hash = mnb.GetHash();
-        if(mnodeman.mapSeenEternitynodeBroadcast.count(hash)) mnodeman.mapSeenEternitynodeBroadcast[hash].lastPing = mnp;
-
-        mnp.Relay();
-
-        return true;
-    }
-    else
-    {
-        // Seems like we are trying to send a ping while the Eternitynode is not registered in the network
-        errorMessage = "Spysend Eternitynode List doesn't include our Eternitynode, shutting down Eternitynode pinging service! " + vin.ToString();
-        status = ACTIVE_ETERNITYNODE_NOT_CAPABLE;
-        notCapableReason = errorMessage;
+    if(mnodeman.IsEternitynodePingedWithin(vin, ETERNITYNODE_MIN_MNP_SECONDS, mnp.sigTime)) {
+        LogPrintf("CActiveEternitynode::SendEternitynodePing -- Too early to send Eternitynode Ping\n");
         return false;
     }
 
-}
+    mnodeman.SetEternitynodeLastPing(vin, mnp);
 
-bool CActiveEternitynode::CreateBroadcast(std::string strService, std::string strKeyEternitynode, std::string strTxHash, std::string strOutputIndex, std::string& errorMessage, CEternitynodeBroadcast &mnb, bool fOffline) {
-    CTxIn vin;
-    CPubKey pubKeyCollateralAddress;
-    CKey keyCollateralAddress;
-    CPubKey pubKeyEternitynode;
-    CKey keyEternitynode;
-
-    //need correct blocks to send ping
-    if(!fOffline && !eternitynodeSync.IsBlockchainSynced()) {
-        errorMessage = "Sync in progress. Must wait until sync is complete to start Eternitynode";
-        LogPrintf("CActiveEternitynode::CreateBroadcast() - %s\n", errorMessage);
-        return false;
-    }
-
-    if(!spySendSigner.SetKey(strKeyEternitynode, errorMessage, keyEternitynode, pubKeyEternitynode))
-    {
-        errorMessage = strprintf("Can't find keys for eternitynode %s - %s", strService, errorMessage);
-        LogPrintf("CActiveEternitynode::CreateBroadcast() - %s\n", errorMessage);
-        return false;
-    }
-
-    if(!GetEternityNodeVin(vin, pubKeyCollateralAddress, keyCollateralAddress, strTxHash, strOutputIndex)) {
-        errorMessage = strprintf("Could not allocate vin %s:%s for eternitynode %s", strTxHash, strOutputIndex, strService);
-        LogPrintf("CActiveEternitynode::CreateBroadcast() - %s\n", errorMessage);
-        return false;
-    }
-
-    CService service = CService(strService);
-    if(Params().NetworkID() == CBaseChainParams::MAIN) {
-        if(service.GetPort() != 4855) {
-            errorMessage = strprintf("Invalid port %u for eternitynode %s - only 4855 is supported on mainnet.", service.GetPort(), strService);
-            LogPrintf("CActiveEternitynode::CreateBroadcast() - %s\n", errorMessage);
-            return false;
-        }
-    } else if(service.GetPort() == 4855) {
-        errorMessage = strprintf("Invalid port %u for eternitynode %s - 4855 is only supported on mainnet.", service.GetPort(), strService);
-        LogPrintf("CActiveEternitynode::CreateBroadcast() - %s\n", errorMessage);
-        return false;
-    }
-
-    addrman.Add(CAddress(service), CNetAddr("127.0.0.1"), 2*60*60);
-
-    return CreateBroadcast(vin, CService(strService), keyCollateralAddress, pubKeyCollateralAddress, keyEternitynode, pubKeyEternitynode, errorMessage, mnb);
-}
-
-bool CActiveEternitynode::CreateBroadcast(CTxIn vin, CService service, CKey keyCollateralAddress, CPubKey pubKeyCollateralAddress, CKey keyEternitynode, CPubKey pubKeyEternitynode, std::string &errorMessage, CEternitynodeBroadcast &mnb) {
-    // wait for reindex and/or import to finish
-    if (fImporting || fReindex) return false;
-
-    CEternitynodePing mnp(vin);
-    if(!mnp.Sign(keyEternitynode, pubKeyEternitynode)){
-        errorMessage = strprintf("Failed to sign ping, vin: %s", vin.ToString());
-        LogPrintf("CActiveEternitynode::CreateBroadcast() -  %s\n", errorMessage);
-        mnb = CEternitynodeBroadcast();
-        return false;
-    }
-
-    mnb = CEternitynodeBroadcast(service, vin, pubKeyCollateralAddress, pubKeyEternitynode, PROTOCOL_VERSION);
-    mnb.lastPing = mnp;
-    if(!mnb.Sign(keyCollateralAddress)){
-        errorMessage = strprintf("Failed to sign broadcast, vin: %s", vin.ToString());
-        LogPrintf("CActiveEternitynode::CreateBroadcast() - %s\n", errorMessage);
-        mnb = CEternitynodeBroadcast();
-        return false;
-    }
+    LogPrintf("CActiveEternitynode::SendEternitynodePing -- Relaying ping, collateral=%s\n", vin.ToString());
+    mnp.Relay();
 
     return true;
 }
 
-bool CActiveEternitynode::GetEternityNodeVin(CTxIn& vin, CPubKey& pubkey, CKey& secretKey) {
-    return GetEternityNodeVin(vin, pubkey, secretKey, "", "");
-}
+void CActiveEternitynode::ManageStateInitial()
+{
+    LogPrint("eternitynode", "CActiveEternitynode::ManageStateInitial -- status = %s, type = %s, pinger enabled = %d\n", GetStatus(), GetTypeString(), fPingerEnabled);
 
-bool CActiveEternitynode::GetEternityNodeVin(CTxIn& vin, CPubKey& pubkey, CKey& secretKey, std::string strTxHash, std::string strOutputIndex) {
-    // wait for reindex and/or import to finish
-    if (fImporting || fReindex) return false;
+    // Check that our local network configuration is correct
+    if (!fListen) {
+        // listen option is probably overwritten by smth else, no good
+        nState = ACTIVE_ETERNITYNODE_NOT_CAPABLE;
+        strNotCapableReason = "Eternitynode must accept connections from outside. Make sure listen configuration option is not overwritten by some another parameter.";
+        LogPrintf("CActiveEternitynode::ManageStateInitial -- %s: %s\n", GetStateString(), strNotCapableReason);
+        return;
+    }
 
-    // Find possible candidates
-    TRY_LOCK(pwalletMain->cs_wallet, fWallet);
-    if(!fWallet) return false;
+    bool fFoundLocal = false;
+    {
+        LOCK(cs_vNodes);
 
-    vector<COutput> possibleCoins = SelectCoinsEternitynode();
-    COutput *selectedOutput;
-
-    // Find the vin
-    if(!strTxHash.empty()) {
-        // Let's find it
-        uint256 txHash(strTxHash);
-        int outputIndex = atoi(strOutputIndex.c_str());
-        bool found = false;
-        BOOST_FOREACH(COutput& out, possibleCoins) {
-            if(out.tx->GetHash() == txHash && out.i == outputIndex)
-            {
-                selectedOutput = &out;
-                found = true;
-                break;
+        // First try to find whatever local address is specified by externalip option
+        fFoundLocal = GetLocal(service) && CEternitynode::IsValidNetAddr(service);
+        if(!fFoundLocal) {
+            // nothing and no live connections, can't do anything for now
+            if (vNodes.empty()) {
+                nState = ACTIVE_ETERNITYNODE_NOT_CAPABLE;
+                strNotCapableReason = "Can't detect valid external address. Will retry when there are some connections available.";
+                LogPrintf("CActiveEternitynode::ManageStateInitial -- %s: %s\n", GetStateString(), strNotCapableReason);
+                return;
+            }
+            // We have some peers, let's try to find our local address from one of them
+            BOOST_FOREACH(CNode* pnode, vNodes) {
+                if (pnode->fSuccessfullyConnected && pnode->addr.IsIPv4()) {
+                    fFoundLocal = GetLocal(service, &pnode->addr) && CEternitynode::IsValidNetAddr(service);
+                    if(fFoundLocal) break;
+                }
             }
         }
-        if(!found) {
-            LogPrintf("CActiveEternitynode::GetEternityNodeVin - Could not locate valid vin\n");
-            return false;
-        }
-    } else {
-        // No output specified,  Select the first one
-        if(possibleCoins.size() > 0) {
-            selectedOutput = &possibleCoins[0];
-        } else {
-            LogPrintf("CActiveEternitynode::GetEternityNodeVin - Could not locate specified vin from possible list\n");
-            return false;
-        }
     }
 
-    // At this point we have a selected output, retrieve the associated info
-    return GetVinFromOutput(*selectedOutput, vin, pubkey, secretKey);
+    if(!fFoundLocal) {
+        nState = ACTIVE_ETERNITYNODE_NOT_CAPABLE;
+        strNotCapableReason = "Can't detect valid external address. Please consider using the externalip configuration option if problem persists. Make sure to use IPv4 address only.";
+        LogPrintf("CActiveEternitynode::ManageStateInitial -- %s: %s\n", GetStateString(), strNotCapableReason);
+        return;
+    }
+
+    int mainnetDefaultPort = Params(CBaseChainParams::MAIN).GetDefaultPort();
+    if(Params().NetworkIDString() == CBaseChainParams::MAIN) {
+        if(service.GetPort() != mainnetDefaultPort) {
+            nState = ACTIVE_ETERNITYNODE_NOT_CAPABLE;
+            strNotCapableReason = strprintf("Invalid port: %u - only %d is supported on mainnet.", service.GetPort(), mainnetDefaultPort);
+            LogPrintf("CActiveEternitynode::ManageStateInitial -- %s: %s\n", GetStateString(), strNotCapableReason);
+            return;
+        }
+    } else if(service.GetPort() == mainnetDefaultPort) {
+        nState = ACTIVE_ETERNITYNODE_NOT_CAPABLE;
+        strNotCapableReason = strprintf("Invalid port: %u - %d is only supported on mainnet.", service.GetPort(), mainnetDefaultPort);
+        LogPrintf("CActiveEternitynode::ManageStateInitial -- %s: %s\n", GetStateString(), strNotCapableReason);
+        return;
+    }
+
+    LogPrintf("CActiveEternitynode::ManageStateInitial -- Checking inbound connection to '%s'\n", service.ToString());
+
+    if(!ConnectNode((CAddress)service, NULL, true)) {
+        nState = ACTIVE_ETERNITYNODE_NOT_CAPABLE;
+        strNotCapableReason = "Could not connect to " + service.ToString();
+        LogPrintf("CActiveEternitynode::ManageStateInitial -- %s: %s\n", GetStateString(), strNotCapableReason);
+        return;
+    }
+
+    // Default to REMOTE
+    eType = ETERNITYNODE_REMOTE;
+
+    // Check if wallet funds are available
+    if(!pwalletMain) {
+        LogPrintf("CActiveEternitynode::ManageStateInitial -- %s: Wallet not available\n", GetStateString());
+        return;
+    }
+
+    if(pwalletMain->IsLocked()) {
+        LogPrintf("CActiveEternitynode::ManageStateInitial -- %s: Wallet is locked\n", GetStateString());
+        return;
+    }
+
+    if(pwalletMain->GetBalance() < 1000*COIN) {
+        LogPrintf("CActiveEternitynode::ManageStateInitial -- %s: Wallet balance is < 1000 ENT\n", GetStateString());
+        return;
+    }
+
+    // Choose coins to use
+    CPubKey pubKeyCollateral;
+    CKey keyCollateral;
+
+    // If collateral is found switch to LOCAL mode
+    if(pwalletMain->GetEternitynodeVinAndKeys(vin, pubKeyCollateral, keyCollateral)) {
+        eType = ETERNITYNODE_LOCAL;
+    }
+
+    LogPrint("eternitynode", "CActiveEternitynode::ManageStateInitial -- End status = %s, type = %s, pinger enabled = %d\n", GetStatus(), GetTypeString(), fPingerEnabled);
 }
 
-
-// Extract Eternitynode vin information from output
-bool CActiveEternitynode::GetVinFromOutput(COutput out, CTxIn& vin, CPubKey& pubkey, CKey& secretKey) {
-    // wait for reindex and/or import to finish
-    if (fImporting || fReindex) return false;
-
-    CScript pubScript;
-
-    vin = CTxIn(out.tx->GetHash(),out.i);
-    pubScript = out.tx->vout[out.i].scriptPubKey; // the inputs PubKey
-
-    CTxDestination address1;
-    ExtractDestination(pubScript, address1);
-    CBitcoinAddress address2(address1);
-
-    CKeyID keyID;
-    if (!address2.GetKeyID(keyID)) {
-        LogPrintf("CActiveEternitynode::GetEternityNodeVin - Address does not refer to a key\n");
-        return false;
-    }
-
-    if (!pwalletMain->GetKey(keyID, secretKey)) {
-        LogPrintf ("CActiveEternitynode::GetEternityNodeVin - Private key for address is not known\n");
-        return false;
-    }
-
-    pubkey = secretKey.GetPubKey();
-    return true;
-}
-
-// get all possible outputs for running Eternitynode
-vector<COutput> CActiveEternitynode::SelectCoinsEternitynode()
+void CActiveEternitynode::ManageStateRemote()
 {
-    vector<COutput> vCoins;
-    vector<COutput> filteredCoins;
-    vector<COutPoint> confLockedCoins;
+    LogPrint("eternitynode", "CActiveEternitynode::ManageStateRemote -- Start status = %s, type = %s, pinger enabled = %d, pubKeyEternitynode.GetID() = %s\n", 
+             GetStatus(), fPingerEnabled, GetTypeString(), pubKeyEternitynode.GetID().ToString());
 
-    // Temporary unlock MN coins from eternitynode.conf
-    if(GetBoolArg("-mnconflock", true)) {
-        uint256 mnTxHash;
-        BOOST_FOREACH(CEternitynodeConfig::CEternitynodeEntry mne, eternitynodeConfig.getEntries()) {
-            mnTxHash.SetHex(mne.getTxHash());
-            COutPoint outpoint = COutPoint(mnTxHash, atoi(mne.getOutputIndex().c_str()));
-            confLockedCoins.push_back(outpoint);
-            pwalletMain->UnlockCoin(outpoint);
+    mnodeman.CheckEternitynode(pubKeyEternitynode);
+    eternitynode_info_t infoMn = mnodeman.GetEternitynodeInfo(pubKeyEternitynode);
+    if(infoMn.fInfoValid) {
+        if(infoMn.nProtocolVersion != PROTOCOL_VERSION) {
+            nState = ACTIVE_ETERNITYNODE_NOT_CAPABLE;
+            strNotCapableReason = "Invalid protocol version";
+            LogPrintf("CActiveEternitynode::ManageStateRemote -- %s: %s\n", GetStateString(), strNotCapableReason);
+            return;
+        }
+        if(service != infoMn.addr) {
+            nState = ACTIVE_ETERNITYNODE_NOT_CAPABLE;
+            strNotCapableReason = "Broadcasted IP doesn't match our external address. Make sure you issued a new broadcast if IP of this eternitynode changed recently.";
+            LogPrintf("CActiveEternitynode::ManageStateRemote -- %s: %s\n", GetStateString(), strNotCapableReason);
+            return;
+        }
+        if(!CEternitynode::IsValidStateForAutoStart(infoMn.nActiveState)) {
+            nState = ACTIVE_ETERNITYNODE_NOT_CAPABLE;
+            strNotCapableReason = strprintf("Eternitynode in %s state", CEternitynode::StateToString(infoMn.nActiveState));
+            LogPrintf("CActiveEternitynode::ManageStateRemote -- %s: %s\n", GetStateString(), strNotCapableReason);
+            return;
+        }
+        if(nState != ACTIVE_ETERNITYNODE_STARTED) {
+            LogPrintf("CActiveEternitynode::ManageStateRemote -- STARTED!\n");
+            vin = infoMn.vin;
+            service = infoMn.addr;
+            fPingerEnabled = true;
+            nState = ACTIVE_ETERNITYNODE_STARTED;
         }
     }
-
-    // Retrieve all possible outputs
-    pwalletMain->AvailableCoins(vCoins);
-
-    // Lock MN coins from eternitynode.conf back if they where temporary unlocked
-    if(!confLockedCoins.empty()) {
-        BOOST_FOREACH(COutPoint outpoint, confLockedCoins)
-            pwalletMain->LockCoin(outpoint);
+    else {
+        nState = ACTIVE_ETERNITYNODE_NOT_CAPABLE;
+        strNotCapableReason = "Eternitynode not in eternitynode list";
+        LogPrintf("CActiveEternitynode::ManageStateRemote -- %s: %s\n", GetStateString(), strNotCapableReason);
     }
-
-    // Filter
-    BOOST_FOREACH(const COutput& out, vCoins)
-    {
-        if(out.tx->vout[out.i].nValue == 1000*COIN) { //exactly
-            filteredCoins.push_back(out);
-        }
-    }
-    return filteredCoins;
 }
 
-// when starting a Eternitynode, this can enable to run as a hot wallet with no funds
-bool CActiveEternitynode::EnableHotColdEternityNode(CTxIn& newVin, CService& newService)
+void CActiveEternitynode::ManageStateLocal()
 {
-    if(!fEternityNode) return false;
+    LogPrint("eternitynode", "CActiveEternitynode::ManageStateLocal -- status = %s, type = %s, pinger enabled = %d\n", GetStatus(), GetTypeString(), fPingerEnabled);
+    if(nState == ACTIVE_ETERNITYNODE_STARTED) {
+        return;
+    }
 
-    status = ACTIVE_ETERNITYNODE_STARTED;
+    // Choose coins to use
+    CPubKey pubKeyCollateral;
+    CKey keyCollateral;
 
-    //The values below are needed for signing mnping messages going forward
-    vin = newVin;
-    service = newService;
+    if(pwalletMain->GetEternitynodeVinAndKeys(vin, pubKeyCollateral, keyCollateral)) {
+        int nInputAge = GetInputAge(vin);
+        if(nInputAge < Params().GetConsensus().nEternitynodeMinimumConfirmations){
+            nState = ACTIVE_ETERNITYNODE_INPUT_TOO_NEW;
+            strNotCapableReason = strprintf(_("%s - %d confirmations"), GetStatus(), nInputAge);
+            LogPrintf("CActiveEternitynode::ManageStateLocal -- %s: %s\n", GetStateString(), strNotCapableReason);
+            return;
+        }
 
-    LogPrintf("CActiveEternitynode::EnableHotColdEternityNode() - Enabled! You may shut down the cold daemon.\n");
+        {
+            LOCK(pwalletMain->cs_wallet);
+            pwalletMain->LockCoin(vin.prevout);
+        }
 
-    return true;
+        CEternitynodeBroadcast mnb;
+        std::string strError;
+        if(!CEternitynodeBroadcast::Create(vin, service, keyCollateral, pubKeyCollateral, keyEternitynode, pubKeyEternitynode, strError, mnb)) {
+            nState = ACTIVE_ETERNITYNODE_NOT_CAPABLE;
+            strNotCapableReason = "Error creating mastenode broadcast: " + strError;
+            LogPrintf("CActiveEternitynode::ManageStateLocal -- %s: %s\n", GetStateString(), strNotCapableReason);
+            return;
+        }
+
+        fPingerEnabled = true;
+        nState = ACTIVE_ETERNITYNODE_STARTED;
+
+        //update to eternitynode list
+        LogPrintf("CActiveEternitynode::ManageStateLocal -- Update Eternitynode List\n");
+        mnodeman.UpdateEternitynodeList(mnb);
+        mnodeman.NotifyEternitynodeUpdates();
+
+        //send to all peers
+        LogPrintf("CActiveEternitynode::ManageStateLocal -- Relay broadcast, vin=%s\n", vin.ToString());
+        mnb.Relay();
+    }
 }

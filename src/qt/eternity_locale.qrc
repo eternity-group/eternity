@@ -1,6 +1,20 @@
 <!DOCTYPE RCC><RCC version="1.0">
     <qresource prefix="/translations">
+        <file alias="bg">locale/eternity_bg.qm</file>
+        <file alias="de">locale/eternity_de.qm</file>
         <file alias="en">locale/eternity_en.qm</file>
+        <file alias="es">locale/eternity_es.qm</file>
+        <file alias="fi">locale/eternity_fi.qm</file>
+        <file alias="fr">locale/eternity_fr.qm</file>
+        <file alias="it">locale/eternity_it.qm</file>
+        <file alias="ja">locale/eternity_ja.qm</file>
+        <file alias="pl">locale/eternity_pl.qm</file>
+        <file alias="pt">locale/eternity_pt.qm</file>
         <file alias="ru">locale/eternity_ru.qm</file>
+        <file alias="sk">locale/eternity_sk.qm</file>
+        <file alias="sv">locale/eternity_sv.qm</file>
+        <file alias="vi">locale/eternity_vi.qm</file>
+        <file alias="zh_CN">locale/eternity_zh_CN.qm</file>
+        <file alias="zh_TW">locale/eternity_zh_TW.qm</file>
     </qresource>
 </RCC>

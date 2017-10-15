@@ -1,86 +1,75 @@
-
-
-// Copyright (c) 2016 The Eternity developers
+// Copyright (c) 2016-2017 The Eternity group Core developers
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
 #ifndef ETERNITYNODE_PAYMENTS_H
 #define ETERNITYNODE_PAYMENTS_H
 
+#include "util.h"
+#include "core_io.h"
 #include "key.h"
 #include "main.h"
 #include "eternitynode.h"
-#include <boost/lexical_cast.hpp>
+#include "utilstrencodings.h"
 
-using namespace std;
+class CEternitynodePayments;
+class CEternitynodePaymentVote;
+class CEternitynodeBlockPayees;
 
-extern CCriticalSection cs_vecPayments;
+static const int ENPAYMENTS_SIGNATURES_REQUIRED         = 6;
+static const int ENPAYMENTS_SIGNATURES_TOTAL            = 10;
+
+//! minimum peer version that can receive and send eternitynode payment messages,
+//  vote for eternitynode and be elected as a payment winner
+// V1 - Last protocol version before update
+// V2 - Newest protocol version
+static const int MIN_ETERNITYNODE_PAYMENT_PROTO_VERSION_1 = 70206;
+static const int MIN_ETERNITYNODE_PAYMENT_PROTO_VERSION_2 = 70206;
+
+extern CCriticalSection cs_vecPayees;
 extern CCriticalSection cs_mapEternitynodeBlocks;
 extern CCriticalSection cs_mapEternitynodePayeeVotes;
 
-class CEternitynodePayments;
-class CEternitynodePaymentWinner;
-class CEternitynodeBlockPayees;
+extern CEternitynodePayments enpayments;
 
-extern CEternitynodePayments eternitynodePayments;
-
-#define MNPAYMENTS_SIGNATURES_REQUIRED           6
-#define MNPAYMENTS_SIGNATURES_TOTAL              10
-
-void ProcessMessageEternitynodePayments(CNode* pfrom, std::string& strCommand, CDataStream& vRecv);
-bool IsReferenceNode(CTxIn& vin);
-bool IsBlockPayeeValid(const CTransaction& txNew, int nBlockHeight);
+/// TODO: all 4 functions do not belong here really, they should be refactored/moved somewhere (main.cpp ?)
+bool IsBlockValueValid(const CBlock& block, int nBlockHeight, CAmount blockReward, std::string &strErrorRet);
+bool IsBlockPayeeValid(const CTransaction& txNew, int nBlockHeight, CAmount blockReward);
+void FillBlockPayments(CMutableTransaction& txNew, int nBlockHeight, CAmount blockReward, CAmount blockEvolution, CTxOut& txoutEternitynodeRet, std::vector<CTxOut>& voutSuperblockRet);
 std::string GetRequiredPaymentsString(int nBlockHeight);
-bool IsBlockValueValid(const CBlock& block, int64_t nExpectedValue);
-void FillBlockPayee(CMutableTransaction& txNew, int64_t nFees);
-
-void DumpEternitynodePayments();
-
-/** Save Eternitynode Payment Data (enpayments.dat)
- */
-class CEternitynodePaymentDB
-{
-private:
-    boost::filesystem::path pathDB;
-    std::string strMagicMessage;
-public:
-    enum ReadResult {
-        Ok,
-        FileError,
-        HashReadError,
-        IncorrectHash,
-        IncorrectMagicMessage,
-        IncorrectMagicNumber,
-        IncorrectFormat
-    };
-
-    CEternitynodePaymentDB();
-    bool Write(const CEternitynodePayments &objToSave);
-    ReadResult Read(CEternitynodePayments& objToLoad, bool fDryRun = false);
-};
 
 class CEternitynodePayee
 {
-public:
+private:
     CScript scriptPubKey;
-    int nVotes;
+    std::vector<uint256> vecVoteHashes;
 
-    CEternitynodePayee() {
-        scriptPubKey = CScript();
-        nVotes = 0;
-    }
+public:
+    CEternitynodePayee() :
+        scriptPubKey(),
+        vecVoteHashes()
+        {}
 
-    CEternitynodePayee(CScript payee, int nVotesIn) {
-        scriptPubKey = payee;
-        nVotes = nVotesIn;
+    CEternitynodePayee(CScript payee, uint256 hashIn) :
+        scriptPubKey(payee),
+        vecVoteHashes()
+    {
+        vecVoteHashes.push_back(hashIn);
     }
 
     ADD_SERIALIZE_METHODS;
 
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
-        READWRITE(scriptPubKey);
-        READWRITE(nVotes);
-     }
+        READWRITE(*(CScriptBase*)(&scriptPubKey));
+        READWRITE(vecVoteHashes);
+    }
+
+    CScript GetPayee() { return scriptPubKey; }
+
+    void AddVoteHash(uint256 hashIn) { vecVoteHashes.push_back(hashIn); }
+    std::vector<uint256> GetVoteHashes() { return vecVoteHashes; }
+    int GetVoteCount() { return vecVoteHashes.size(); }
 };
 
 // Keep track of votes for payees from eternitynodes
@@ -88,71 +77,36 @@ class CEternitynodeBlockPayees
 {
 public:
     int nBlockHeight;
-    std::vector<CEternitynodePayee> vecPayments;
+    std::vector<CEternitynodePayee> vecPayees;
 
-    CEternitynodeBlockPayees(){
-        nBlockHeight = 0;
-        vecPayments.clear();
-    }
-    CEternitynodeBlockPayees(int nBlockHeightIn) {
-        nBlockHeight = nBlockHeightIn;
-        vecPayments.clear();
-    }
-
-    void AddPayee(CScript payeeIn, int nIncrement){
-        LOCK(cs_vecPayments);
-
-        BOOST_FOREACH(CEternitynodePayee& payee, vecPayments){
-            if(payee.scriptPubKey == payeeIn) {
-                payee.nVotes += nIncrement;
-                return;
-            }
-        }
-
-        CEternitynodePayee c(payeeIn, nIncrement);
-        vecPayments.push_back(c);
-    }
-
-    bool GetPayee(CScript& payee)
-    {
-        LOCK(cs_vecPayments);
-
-        int nVotes = -1;
-        BOOST_FOREACH(CEternitynodePayee& p, vecPayments){
-            if(p.nVotes > nVotes){
-                payee = p.scriptPubKey;
-                nVotes = p.nVotes;
-            }
-        }
-
-        return (nVotes > -1);
-    }
-
-    bool HasPayeeWithVotes(CScript payee, int nVotesReq)
-    {
-        LOCK(cs_vecPayments);
-
-        BOOST_FOREACH(CEternitynodePayee& p, vecPayments){
-            if(p.nVotes >= nVotesReq && p.scriptPubKey == payee) return true;
-        }
-
-        return false;
-    }
-
-    bool IsTransactionValid(const CTransaction& txNew);
-    std::string GetRequiredPaymentsString();
+    CEternitynodeBlockPayees() :
+        nBlockHeight(0),
+        vecPayees()
+        {}
+    CEternitynodeBlockPayees(int nBlockHeightIn) :
+        nBlockHeight(nBlockHeightIn),
+        vecPayees()
+        {}
 
     ADD_SERIALIZE_METHODS;
 
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
         READWRITE(nBlockHeight);
-        READWRITE(vecPayments);
-     }
+        READWRITE(vecPayees);
+    }
+
+    void AddPayee(const CEternitynodePaymentVote& vote);
+    bool GetBestPayee(CScript& payeeRet);
+    bool HasPayeeWithVotes(CScript payeeIn, int nVotesReq);
+
+    bool IsTransactionValid(const CTransaction& txNew);
+
+    std::string GetRequiredPaymentsString();
 };
 
-// for storing the winning payments
-class CEternitynodePaymentWinner
+// vote for the winning payment
+class CEternitynodePaymentVote
 {
 public:
     CTxIn vinEternitynode;
@@ -161,36 +115,19 @@ public:
     CScript payee;
     std::vector<unsigned char> vchSig;
 
-    CEternitynodePaymentWinner() {
-        nBlockHeight = 0;
-        vinEternitynode = CTxIn();
-        payee = CScript();
-    }
+    CEternitynodePaymentVote() :
+        vinEternitynode(),
+        nBlockHeight(0),
+        payee(),
+        vchSig()
+        {}
 
-    CEternitynodePaymentWinner(CTxIn vinIn) {
-        nBlockHeight = 0;
-        vinEternitynode = vinIn;
-        payee = CScript();
-    }
-
-    uint256 GetHash(){
-        CHashWriter ss(SER_GETHASH, PROTOCOL_VERSION);
-        ss << payee;
-        ss << nBlockHeight;
-        ss << vinEternitynode.prevout;
-
-        return ss.GetHash();
-    }
-
-    bool Sign(CKey& keyEternitynode, CPubKey& pubKeyEternitynode);
-    bool IsValid(CNode* pnode, std::string& strError);
-    bool SignatureValid();
-    void Relay();
-
-    void AddPayee(CScript payeeIn){
-        payee = payeeIn;
-    }
-
+    CEternitynodePaymentVote(CTxIn vinEternitynode, int nBlockHeight, CScript payee) :
+        vinEternitynode(vinEternitynode),
+        nBlockHeight(nBlockHeight),
+        payee(payee),
+        vchSig()
+        {}
 
     ADD_SERIALIZE_METHODS;
 
@@ -198,19 +135,28 @@ public:
     inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
         READWRITE(vinEternitynode);
         READWRITE(nBlockHeight);
-        READWRITE(payee);
+        READWRITE(*(CScriptBase*)(&payee));
         READWRITE(vchSig);
     }
 
-    std::string ToString()
-    {
-        std::string ret = "";
-        ret += vinEternitynode.ToString();
-        ret += ", " + boost::lexical_cast<std::string>(nBlockHeight);
-        ret += ", " + payee.ToString();
-        ret += ", " + boost::lexical_cast<std::string>((int)vchSig.size());
-        return ret;
+    uint256 GetHash() const {
+        CHashWriter ss(SER_GETHASH, PROTOCOL_VERSION);
+        ss << *(CScriptBase*)(&payee);
+        ss << nBlockHeight;
+        ss << vinEternitynode.prevout;
+        return ss.GetHash();
     }
+
+    bool Sign();
+    bool CheckSignature(const CPubKey& pubKeyEternitynode, int nValidationHeight, int &nDos);
+
+    bool IsValid(CNode* pnode, int nValidationHeight, std::string& strError);
+    void Relay();
+
+    bool IsVerified() { return !vchSig.empty(); }
+    void MarkAsNotVerified() { vchSig.clear(); }
+
+    std::string ToString() const;
 };
 
 //
@@ -221,67 +167,58 @@ public:
 class CEternitynodePayments
 {
 private:
-    int nSyncedFromPeer;
-    int nLastBlockHeight;
+    // eternitynode count times nStorageCoeff payments blocks should be stored ...
+    const float nStorageCoeff;
+    // ... but at least nMinBlocksToStore (payments blocks)
+    const int nMinBlocksToStore;
+
+    // Keep track of current block index
+    const CBlockIndex *pCurrentBlockIndex;
 
 public:
-    std::map<uint256, CEternitynodePaymentWinner> mapEternitynodePayeeVotes;
+    std::map<uint256, CEternitynodePaymentVote> mapEternitynodePaymentVotes;
     std::map<int, CEternitynodeBlockPayees> mapEternitynodeBlocks;
-    std::map<uint256, int> mapEternitynodesLastVote; //prevout.hash + prevout.n, nBlockHeight
+    std::map<COutPoint, int> mapEternitynodesLastVote;
 
-    CEternitynodePayments() {
-        nSyncedFromPeer = 0;
-        nLastBlockHeight = 0;
-    }
-
-    void Clear() {
-        LOCK2(cs_mapEternitynodeBlocks, cs_mapEternitynodePayeeVotes);
-        mapEternitynodeBlocks.clear();
-        mapEternitynodePayeeVotes.clear();
-    }
-
-    bool AddWinningEternitynode(CEternitynodePaymentWinner& winner);
-    bool ProcessBlock(int nBlockHeight);
-
-    void Sync(CNode* node, int nCountNeeded);
-    void CleanPaymentList();
-    int LastPayment(CEternitynode& mn);
-
-    bool GetBlockPayee(int nBlockHeight, CScript& payee);
-    bool IsTransactionValid(const CTransaction& txNew, int nBlockHeight);
-    bool IsScheduled(CEternitynode& mn, int nNotBlockHeight);
-
-    bool CanVote(COutPoint outEternitynode, int nBlockHeight) {
-        LOCK(cs_mapEternitynodePayeeVotes);
-
-        if(mapEternitynodesLastVote.count(outEternitynode.hash + outEternitynode.n)) {
-            if(mapEternitynodesLastVote[outEternitynode.hash + outEternitynode.n] == nBlockHeight) {
-                return false;
-            }
-        }
-
-        //record this eternitynode voted
-        mapEternitynodesLastVote[outEternitynode.hash + outEternitynode.n] = nBlockHeight;
-        return true;
-    }
-
-    int GetMinEternitynodePaymentsProto();
-    void ProcessMessageEternitynodePayments(CNode* pfrom, std::string& strCommand, CDataStream& vRecv);
-    std::string GetRequiredPaymentsString(int nBlockHeight);
-    void FillBlockPayee(CMutableTransaction& txNew, int64_t nFees);
-    std::string ToString() const;
-    int GetOldestBlock();
-    int GetNewestBlock();
+    CEternitynodePayments() : nStorageCoeff(1.25), nMinBlocksToStore(5000) {}
 
     ADD_SERIALIZE_METHODS;
 
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
-        READWRITE(mapEternitynodePayeeVotes);
+        READWRITE(mapEternitynodePaymentVotes);
         READWRITE(mapEternitynodeBlocks);
     }
+
+    void Clear();
+
+    bool AddPaymentVote(const CEternitynodePaymentVote& vote);
+    bool HasVerifiedPaymentVote(uint256 hashIn);
+    bool ProcessBlock(int nBlockHeight);
+
+    void Sync(CNode* node);
+    void RequestLowDataPaymentBlocks(CNode* pnode);
+    void CheckAndRemove();
+
+    bool GetBlockPayee(int nBlockHeight, CScript& payee);
+    bool IsTransactionValid(const CTransaction& txNew, int nBlockHeight);
+    bool IsScheduled(CEternitynode& mn, int nNotBlockHeight);
+
+    bool CanVote(COutPoint outEternitynode, int nBlockHeight);
+
+    int GetMinEternitynodePaymentsProto();
+    void ProcessMessage(CNode* pfrom, std::string& strCommand, CDataStream& vRecv);
+    std::string GetRequiredPaymentsString(int nBlockHeight);
+    void FillBlockPayee(CMutableTransaction& txNew, int nBlockHeight, CAmount blockReward, CTxOut& txoutEternitynodeRet);
+    std::string ToString() const;
+
+    int GetBlockCount() { return mapEternitynodeBlocks.size(); }
+    int GetVoteCount() { return mapEternitynodePaymentVotes.size(); }
+
+    bool IsEnoughData();
+    int GetStorageLimit();
+
+    void UpdatedBlockTip(const CBlockIndex *pindex);
 };
-
-
 
 #endif

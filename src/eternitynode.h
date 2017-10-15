@@ -1,36 +1,28 @@
-
-// Copyright (c) 2016 The Eternity developers
+// Copyright (c) 2016-2017 The Eternity group Core developers
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
 #ifndef ETERNITYNODE_H
 #define ETERNITYNODE_H
 
-#include "sync.h"
-#include "net.h"
 #include "key.h"
-#include "util.h"
-#include "base58.h"
 #include "main.h"
+#include "net.h"
+#include "spork.h"
 #include "timedata.h"
-
-#define ETERNITYNODE_MIN_CONFIRMATIONS           15
-#define ETERNITYNODE_MIN_MNP_SECONDS             (10*60)
-#define ETERNITYNODE_MIN_MNB_SECONDS             (5*60)
-#define ETERNITYNODE_PING_SECONDS                (5*60)
-#define ETERNITYNODE_EXPIRATION_SECONDS          (65*60)
-#define ETERNITYNODE_REMOVAL_SECONDS             (75*60)
-#define ETERNITYNODE_CHECK_SECONDS               5
-
-using namespace std;
 
 class CEternitynode;
 class CEternitynodeBroadcast;
 class CEternitynodePing;
-extern map<int64_t, uint256> mapCacheBlockHashes;
 
-bool GetBlockHash(uint256& hash, int nBlockHeight);
+static const int ETERNITYNODE_CHECK_SECONDS               =   5;
+static const int ETERNITYNODE_MIN_MNB_SECONDS             =   5 * 60;
+static const int ETERNITYNODE_MIN_MNP_SECONDS             =  10 * 60;
+static const int ETERNITYNODE_EXPIRATION_SECONDS          =  65 * 60;
+static const int ETERNITYNODE_WATCHDOG_MAX_SECONDS        = 120 * 60;
+static const int ETERNITYNODE_NEW_START_REQUIRED_SECONDS  = 180 * 60;
 
-
+static const int ETERNITYNODE_POSE_BAN_MAX_SCORE          = 5;
 //
 // The Eternitynode Ping Class : Contains a different serialize method for sending pings from eternitynodes throughout the network
 //
@@ -38,15 +30,20 @@ bool GetBlockHash(uint256& hash, int nBlockHeight);
 class CEternitynodePing
 {
 public:
-
     CTxIn vin;
     uint256 blockHash;
     int64_t sigTime; //mnb message times
     std::vector<unsigned char> vchSig;
     //removed stop
 
-    CEternitynodePing();
-    CEternitynodePing(CTxIn& newVin);
+    CEternitynodePing() :
+        vin(),
+        blockHash(),
+        sigTime(0),
+        vchSig()
+        {}
+
+    CEternitynodePing(CTxIn& vinNew);
 
     ADD_SERIALIZE_METHODS;
 
@@ -56,18 +53,6 @@ public:
         READWRITE(blockHash);
         READWRITE(sigTime);
         READWRITE(vchSig);
-    }
-
-    bool CheckAndUpdate(int& nDos, bool fRequireEnabled = true, bool fCheckSigTimeOnly = false);
-    bool Sign(CKey& keyEternitynode, CPubKey& pubKeyEternitynode);
-    bool VerifySignature(CPubKey& pubKeyEternitynode, int &nDos);
-    void Relay();
-
-    uint256 GetHash(){
-        CHashWriter ss(SER_GETHASH, PROTOCOL_VERSION);
-        ss << vin;
-        ss << sigTime;
-        return ss.GetHash();
     }
 
     void swap(CEternitynodePing& first, CEternitynodePing& second) // nothrow
@@ -82,6 +67,22 @@ public:
         swap(first.sigTime, second.sigTime);
         swap(first.vchSig, second.vchSig);
     }
+
+    uint256 GetHash() const
+    {
+        CHashWriter ss(SER_GETHASH, PROTOCOL_VERSION);
+        ss << vin;
+        ss << sigTime;
+        return ss.GetHash();
+    }
+
+    bool IsExpired() { return GetTime() - sigTime > ETERNITYNODE_NEW_START_REQUIRED_SECONDS; }
+
+    bool Sign(CKey& keyEternitynode, CPubKey& pubKeyEternitynode);
+    bool CheckSignature(CPubKey& pubKeyEternitynode, int &nDos);
+    bool SimpleCheck(int& nDos);
+    bool CheckAndUpdate(CEternitynode* pmn, bool fFromNewBroadcast, int& nDos);
+    void Relay();
 
     CEternitynodePing& operator=(CEternitynodePing from)
     {
@@ -99,6 +100,38 @@ public:
 
 };
 
+struct eternitynode_info_t
+{
+    eternitynode_info_t()
+        : vin(),
+          addr(),
+          pubKeyCollateralAddress(),
+          pubKeyEternitynode(),
+          sigTime(0),
+          nLastDsq(0),
+          nTimeLastChecked(0),
+          nTimeLastPaid(0),
+          nTimeLastWatchdogVote(0),
+          nTimeLastPing(0),
+          nActiveState(0),
+          nProtocolVersion(0),
+          fInfoValid(false)
+        {}
+
+    CTxIn vin;
+    CService addr;
+    CPubKey pubKeyCollateralAddress;
+    CPubKey pubKeyEternitynode;
+    int64_t sigTime; //mnb message time
+    int64_t nLastDsq; //the dsq count from the last dsq broadcast of this node
+    int64_t nTimeLastChecked;
+    int64_t nTimeLastPaid;
+    int64_t nTimeLastWatchdogVote;
+    int64_t nTimeLastPing;
+    int nActiveState;
+    int nProtocolVersion;
+    bool fInfoValid;
+};
 
 //
 // The Eternitynode Class. For managing the Spysend process. It contains the input of the 1000DRK, signature to prove
@@ -109,37 +142,73 @@ class CEternitynode
 private:
     // critical section to protect the inner data structures
     mutable CCriticalSection cs;
-    int64_t lastTimeChecked;
+
 public:
     enum state {
-        ETERNITYNODE_ENABLED = 1,
-        ETERNITYNODE_EXPIRED = 2,
-        ETERNITYNODE_VIN_SPENT = 3,
-        ETERNITYNODE_REMOVE = 4,
-        ETERNITYNODE_POS_ERROR = 5
+        ETERNITYNODE_PRE_ENABLED,
+        ETERNITYNODE_ENABLED,
+        ETERNITYNODE_EXPIRED,
+        ETERNITYNODE_OUTPOINT_SPENT,
+        ETERNITYNODE_UPDATE_REQUIRED,
+        ETERNITYNODE_WATCHDOG_EXPIRED,
+        ETERNITYNODE_NEW_START_REQUIRED,
+        ETERNITYNODE_POSE_BAN
     };
 
     CTxIn vin;
     CService addr;
-    CPubKey pubkey;
-    CPubKey pubkey2;
-    std::vector<unsigned char> sig;
-    int activeState;
-    int64_t sigTime; //mnb message time
-    int cacheInputAge;
-    int cacheInputAgeBlock;
-    bool unitTest;
-    bool allowFreeTx;
-    int protocolVersion;
-    int64_t nLastDsq; //the dsq count from the last dsq broadcast of this node
-    int nScanningErrorCount;
-    int nLastScanningErrorBlockHeight;
+    CPubKey pubKeyCollateralAddress;
+    CPubKey pubKeyEternitynode;
     CEternitynodePing lastPing;
+    std::vector<unsigned char> vchSig;
+    int64_t sigTime; //mnb message time
+    int64_t nLastDsq; //the dsq count from the last dsq broadcast of this node
+    int64_t nTimeLastChecked;
+    int64_t nTimeLastPaid;
+    int64_t nTimeLastWatchdogVote;
+    int nActiveState;
+    int nCacheCollateralBlock;
+    int nBlockLastPaid;
+    int nProtocolVersion;
+    int nPoSeBanScore;
+    int nPoSeBanHeight;
+    bool fAllowMixingTx;
+    bool fUnitTest;
+
+    // KEEP TRACK OF GOVERNANCE ITEMS EACH ETERNITYNODE HAS VOTE UPON FOR RECALCULATION
+    std::map<uint256, int> mapGovernanceObjectsVotedOn;
 
     CEternitynode();
     CEternitynode(const CEternitynode& other);
     CEternitynode(const CEternitynodeBroadcast& mnb);
+    CEternitynode(CService addrNew, CTxIn vinNew, CPubKey pubKeyCollateralAddressNew, CPubKey pubKeyEternitynodeNew, int nProtocolVersionIn);
 
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
+        LOCK(cs);
+        READWRITE(vin);
+        READWRITE(addr);
+        READWRITE(pubKeyCollateralAddress);
+        READWRITE(pubKeyEternitynode);
+        READWRITE(lastPing);
+        READWRITE(vchSig);
+        READWRITE(sigTime);
+        READWRITE(nLastDsq);
+        READWRITE(nTimeLastChecked);
+        READWRITE(nTimeLastPaid);
+        READWRITE(nTimeLastWatchdogVote);
+        READWRITE(nActiveState);
+        READWRITE(nCacheCollateralBlock);
+        READWRITE(nBlockLastPaid);
+        READWRITE(nProtocolVersion);
+        READWRITE(nPoSeBanScore);
+        READWRITE(nPoSeBanHeight);
+        READWRITE(fAllowMixingTx);
+        READWRITE(fUnitTest);
+        READWRITE(mapGovernanceObjectsVotedOn);
+    }
 
     void swap(CEternitynode& first, CEternitynode& second) // nothrow
     {
@@ -150,21 +219,103 @@ public:
         // the two classes are effectively swapped
         swap(first.vin, second.vin);
         swap(first.addr, second.addr);
-        swap(first.pubkey, second.pubkey);
-        swap(first.pubkey2, second.pubkey2);
-        swap(first.sig, second.sig);
-        swap(first.activeState, second.activeState);
-        swap(first.sigTime, second.sigTime);
+        swap(first.pubKeyCollateralAddress, second.pubKeyCollateralAddress);
+        swap(first.pubKeyEternitynode, second.pubKeyEternitynode);
         swap(first.lastPing, second.lastPing);
-        swap(first.cacheInputAge, second.cacheInputAge);
-        swap(first.cacheInputAgeBlock, second.cacheInputAgeBlock);
-        swap(first.unitTest, second.unitTest);
-        swap(first.allowFreeTx, second.allowFreeTx);
-        swap(first.protocolVersion, second.protocolVersion);
+        swap(first.vchSig, second.vchSig);
+        swap(first.sigTime, second.sigTime);
         swap(first.nLastDsq, second.nLastDsq);
-        swap(first.nScanningErrorCount, second.nScanningErrorCount);
-        swap(first.nLastScanningErrorBlockHeight, second.nLastScanningErrorBlockHeight);
+        swap(first.nTimeLastChecked, second.nTimeLastChecked);
+        swap(first.nTimeLastPaid, second.nTimeLastPaid);
+        swap(first.nTimeLastWatchdogVote, second.nTimeLastWatchdogVote);
+        swap(first.nActiveState, second.nActiveState);
+        swap(first.nCacheCollateralBlock, second.nCacheCollateralBlock);
+        swap(first.nBlockLastPaid, second.nBlockLastPaid);
+        swap(first.nProtocolVersion, second.nProtocolVersion);
+        swap(first.nPoSeBanScore, second.nPoSeBanScore);
+        swap(first.nPoSeBanHeight, second.nPoSeBanHeight);
+        swap(first.fAllowMixingTx, second.fAllowMixingTx);
+        swap(first.fUnitTest, second.fUnitTest);
+        swap(first.mapGovernanceObjectsVotedOn, second.mapGovernanceObjectsVotedOn);
     }
+
+    // CALCULATE A RANK AGAINST OF GIVEN BLOCK
+    arith_uint256 CalculateScore(const uint256& blockHash);
+
+    bool UpdateFromNewBroadcast(CEternitynodeBroadcast& mnb);
+
+    void Check(bool fForce = false);
+
+    bool IsBroadcastedWithin(int nSeconds) { return GetAdjustedTime() - sigTime < nSeconds; }
+
+    bool IsPingedWithin(int nSeconds, int64_t nTimeToCheckAt = -1)
+    {
+        if(lastPing == CEternitynodePing()) return false;
+
+        if(nTimeToCheckAt == -1) {
+            nTimeToCheckAt = GetAdjustedTime();
+        }
+        return nTimeToCheckAt - lastPing.sigTime < nSeconds;
+    }
+
+    bool IsEnabled() { return nActiveState == ETERNITYNODE_ENABLED; }
+    bool IsPreEnabled() { return nActiveState == ETERNITYNODE_PRE_ENABLED; }
+    bool IsPoSeBanned() { return nActiveState == ETERNITYNODE_POSE_BAN; }
+    // NOTE: this one relies on nPoSeBanScore, not on nActiveState as everything else here
+    bool IsPoSeVerified() { return nPoSeBanScore <= -ETERNITYNODE_POSE_BAN_MAX_SCORE; }
+    bool IsExpired() { return nActiveState == ETERNITYNODE_EXPIRED; }
+    bool IsOutpointSpent() { return nActiveState == ETERNITYNODE_OUTPOINT_SPENT; }
+    bool IsUpdateRequired() { return nActiveState == ETERNITYNODE_UPDATE_REQUIRED; }
+    bool IsWatchdogExpired() { return nActiveState == ETERNITYNODE_WATCHDOG_EXPIRED; }
+    bool IsNewStartRequired() { return nActiveState == ETERNITYNODE_NEW_START_REQUIRED; }
+
+    static bool IsValidStateForAutoStart(int nActiveStateIn)
+    {
+        return  nActiveStateIn == ETERNITYNODE_ENABLED ||
+                nActiveStateIn == ETERNITYNODE_PRE_ENABLED ||
+                nActiveStateIn == ETERNITYNODE_EXPIRED ||
+                nActiveStateIn == ETERNITYNODE_WATCHDOG_EXPIRED;
+    }
+
+    bool IsValidForPayment()
+    {
+        if(nActiveState == ETERNITYNODE_ENABLED) {
+            return true;
+        }
+        if(!sporkManager.IsSporkActive(SPORK_14_REQUIRE_SENTINEL_FLAG) &&
+           (nActiveState == ETERNITYNODE_WATCHDOG_EXPIRED)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    bool IsValidNetAddr();
+    static bool IsValidNetAddr(CService addrIn);
+
+    void IncreasePoSeBanScore() { if(nPoSeBanScore < ETERNITYNODE_POSE_BAN_MAX_SCORE) nPoSeBanScore++; }
+    void DecreasePoSeBanScore() { if(nPoSeBanScore > -ETERNITYNODE_POSE_BAN_MAX_SCORE) nPoSeBanScore--; }
+
+    eternitynode_info_t GetInfo();
+
+    static std::string StateToString(int nStateIn);
+    std::string GetStateString() const;
+    std::string GetStatus() const;
+
+    int GetCollateralAge();
+
+    int GetLastPaidTime() { return nTimeLastPaid; }
+    int GetLastPaidBlock() { return nBlockLastPaid; }
+    void UpdateLastPaid(const CBlockIndex *pindex, int nMaxBlocksToScanBack);
+
+    // KEEP TRACK OF EACH GOVERNANCE ITEM INCASE THIS NODE GOES OFFLINE, SO WE CAN RECALC THEIR STATUS
+    void AddGovernanceVote(uint256 nGovernanceObjectHash);
+    // RECALCULATE CACHED STATUS FLAGS FOR ALL AFFECTED OBJECTS
+    void FlagGovernanceItemsAsDirty();
+
+    void RemoveGovernanceObject(uint256 nGovernanceObjectHash);
+
+    void UpdateWatchdogVoteTime();
 
     CEternitynode& operator=(CEternitynode from)
     {
@@ -180,96 +331,6 @@ public:
         return !(a.vin == b.vin);
     }
 
-    uint256 CalculateScore(int mod=1, int64_t nBlockHeight=0);
-
-    ADD_SERIALIZE_METHODS;
-
-    template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
-            LOCK(cs);
-
-            READWRITE(vin);
-            READWRITE(addr);
-            READWRITE(pubkey);
-            READWRITE(pubkey2);
-            READWRITE(sig);
-            READWRITE(sigTime);
-            READWRITE(protocolVersion);
-            READWRITE(activeState);
-            READWRITE(lastPing);
-            READWRITE(cacheInputAge);
-            READWRITE(cacheInputAgeBlock);
-            READWRITE(unitTest);
-            READWRITE(allowFreeTx);
-            READWRITE(nLastDsq);
-            READWRITE(nScanningErrorCount);
-            READWRITE(nLastScanningErrorBlockHeight);
-    }
-
-    int64_t SecondsSincePayment();
-
-    bool UpdateFromNewBroadcast(CEternitynodeBroadcast& mnb);
-
-    inline uint64_t SliceHash(uint256& hash, int slice)
-    {
-        uint64_t n = 0;
-        memcpy(&n, &hash+slice*64, 64);
-        return n;
-    }
-
-    void Check(bool forceCheck = false);
-
-    bool IsBroadcastedWithin(int seconds)
-    {
-        return (GetAdjustedTime() - sigTime) < seconds;
-    }
-
-    bool IsPingedWithin(int seconds, int64_t now = -1)
-    {
-        now == -1 ? now = GetAdjustedTime() : now;
-
-        return (lastPing == CEternitynodePing())
-                ? false
-                : now - lastPing.sigTime < seconds;
-    }
-
-    void Disable()
-    {
-        sigTime = 0;
-        lastPing = CEternitynodePing();
-    }
-
-    bool IsEnabled()
-    {
-        return activeState == ETERNITYNODE_ENABLED;
-    }
-
-    int GetEternitynodeInputAge()
-    {
-        if(chainActive.Tip() == NULL) return 0;
-
-        if(cacheInputAge == 0){
-            cacheInputAge = GetInputAge(vin);
-            cacheInputAgeBlock = chainActive.Tip()->nHeight;
-        }
-
-        return cacheInputAge+(chainActive.Tip()->nHeight-cacheInputAgeBlock);
-    }
-
-    std::string Status() {
-        std::string strStatus = "ACTIVE";
-
-        if(activeState == CEternitynode::ETERNITYNODE_ENABLED) strStatus   = "ENABLED";
-        if(activeState == CEternitynode::ETERNITYNODE_EXPIRED) strStatus   = "EXPIRED";
-        if(activeState == CEternitynode::ETERNITYNODE_VIN_SPENT) strStatus = "VIN_SPENT";
-        if(activeState == CEternitynode::ETERNITYNODE_REMOVE) strStatus    = "REMOVE";
-        if(activeState == CEternitynode::ETERNITYNODE_POS_ERROR) strStatus = "POS_ERROR";
-
-        return strStatus;
-    }
-
-    int64_t GetLastPaid();
-
 };
 
 
@@ -280,15 +341,13 @@ public:
 class CEternitynodeBroadcast : public CEternitynode
 {
 public:
-    CEternitynodeBroadcast();
-    CEternitynodeBroadcast(CService newAddr, CTxIn newVin, CPubKey newPubkey, CPubKey newPubkey2, int protocolVersionIn);
-    CEternitynodeBroadcast(const CEternitynode& mn);
 
-    bool CheckAndUpdate(int& nDoS);
-    bool CheckInputsAndAdd(int& nDos);
-    bool Sign(CKey& keyCollateralAddress);
-    bool VerifySignature();
-    void Relay();
+    bool fRecovery;
+
+    CEternitynodeBroadcast() : CEternitynode(), fRecovery(false) {}
+    CEternitynodeBroadcast(const CEternitynode& mn) : CEternitynode(mn), fRecovery(false) {}
+    CEternitynodeBroadcast(CService addrNew, CTxIn vinNew, CPubKey pubKeyCollateralAddressNew, CPubKey pubKeyEternitynodeNew, int nProtocolVersionIn) :
+        CEternitynode(addrNew, vinNew, pubKeyCollateralAddressNew, pubKeyEternitynodeNew, nProtocolVersionIn), fRecovery(false) {}
 
     ADD_SERIALIZE_METHODS;
 
@@ -296,22 +355,96 @@ public:
     inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
         READWRITE(vin);
         READWRITE(addr);
-        READWRITE(pubkey);
-        READWRITE(pubkey2);
-        READWRITE(sig);
+        READWRITE(pubKeyCollateralAddress);
+        READWRITE(pubKeyEternitynode);
+        READWRITE(vchSig);
         READWRITE(sigTime);
-        READWRITE(protocolVersion);
+        READWRITE(nProtocolVersion);
         READWRITE(lastPing);
-        READWRITE(nLastDsq);
     }
 
-    uint256 GetHash(){
+    uint256 GetHash() const
+    {
         CHashWriter ss(SER_GETHASH, PROTOCOL_VERSION);
+        ss << vin;
+        ss << pubKeyCollateralAddress;
         ss << sigTime;
-        ss << pubkey;
         return ss.GetHash();
     }
 
+    /// Create Eternitynode broadcast, needs to be relayed manually after that
+    static bool Create(CTxIn vin, CService service, CKey keyCollateralAddressNew, CPubKey pubKeyCollateralAddressNew, CKey keyEternitynodeNew, CPubKey pubKeyEternitynodeNew, std::string &strErrorRet, CEternitynodeBroadcast &mnbRet);
+    static bool Create(std::string strService, std::string strKey, std::string strTxHash, std::string strOutputIndex, std::string& strErrorRet, CEternitynodeBroadcast &mnbRet, bool fOffline = false);
+
+    bool SimpleCheck(int& nDos);
+    bool Update(CEternitynode* pmn, int& nDos);
+    bool CheckOutpoint(int& nDos);
+
+    bool Sign(CKey& keyCollateralAddress);
+    bool CheckSignature(int& nDos);
+    void Relay();
+};
+
+class CEternitynodeVerification
+{
+public:
+    CTxIn vin1;
+    CTxIn vin2;
+    CService addr;
+    int nonce;
+    int nBlockHeight;
+    std::vector<unsigned char> vchSig1;
+    std::vector<unsigned char> vchSig2;
+
+    CEternitynodeVerification() :
+        vin1(),
+        vin2(),
+        addr(),
+        nonce(0),
+        nBlockHeight(0),
+        vchSig1(),
+        vchSig2()
+        {}
+
+    CEternitynodeVerification(CService addr, int nonce, int nBlockHeight) :
+        vin1(),
+        vin2(),
+        addr(addr),
+        nonce(nonce),
+        nBlockHeight(nBlockHeight),
+        vchSig1(),
+        vchSig2()
+        {}
+
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
+        READWRITE(vin1);
+        READWRITE(vin2);
+        READWRITE(addr);
+        READWRITE(nonce);
+        READWRITE(nBlockHeight);
+        READWRITE(vchSig1);
+        READWRITE(vchSig2);
+    }
+
+    uint256 GetHash() const
+    {
+        CHashWriter ss(SER_GETHASH, PROTOCOL_VERSION);
+        ss << vin1;
+        ss << vin2;
+        ss << addr;
+        ss << nonce;
+        ss << nBlockHeight;
+        return ss.GetHash();
+    }
+
+    void Relay() const
+    {
+        CInv inv(MSG_ETERNITYNODE_VERIFY, GetHash());
+        RelayInv(inv);
+    }
 };
 
 #endif

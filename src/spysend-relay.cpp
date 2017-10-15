@@ -1,4 +1,4 @@
-
+#include "spysend.h"
 #include "spysend-relay.h"
 
 
@@ -36,25 +36,24 @@ std::string CSpySendRelay::ToString()
 
 bool CSpySendRelay::Sign(std::string strSharedKey)
 {
+    std::string strError = "";
     std::string strMessage = in.ToString() + out.ToString();
 
     CKey key2;
     CPubKey pubkey2;
-    std::string errorMessage = "";
 
-    if(!spySendSigner.SetKey(strSharedKey, errorMessage, key2, pubkey2))
-    {
-        LogPrintf("CSpySendRelay():Sign - ERROR: Invalid shared key: '%s'\n", errorMessage.c_str());
+    if(!spySendSigner.GetKeysFromSecret(strSharedKey, key2, pubkey2)) {
+        LogPrintf("CSpySendRelay::Sign -- GetKeysFromSecret() failed, invalid shared key %s\n", strSharedKey);
         return false;
     }
 
-    if(!spySendSigner.SignMessage(strMessage, errorMessage, vchSig2, key2)) {
-        LogPrintf("CSpySendRelay():Sign - Sign message failed\n");
+    if(!spySendSigner.SignMessage(strMessage, vchSig2, key2)) {
+        LogPrintf("CSpySendRelay::Sign -- SignMessage() failed\n");
         return false;
     }
 
-    if(!spySendSigner.VerifyMessage(pubkey2, vchSig2, strMessage, errorMessage)) {
-        LogPrintf("CSpySendRelay():Sign - Verify message failed\n");
+    if(!spySendSigner.VerifyMessage(pubkey2, vchSig2, strMessage, strError)) {
+        LogPrintf("CSpySendRelay::Sign -- VerifyMessage() failed, error: %s\n", strError);
         return false;
     }
 
@@ -63,20 +62,19 @@ bool CSpySendRelay::Sign(std::string strSharedKey)
 
 bool CSpySendRelay::VerifyMessage(std::string strSharedKey)
 {
+    std::string strError = "";
     std::string strMessage = in.ToString() + out.ToString();
 
     CKey key2;
     CPubKey pubkey2;
-    std::string errorMessage = "";
 
-    if(!spySendSigner.SetKey(strSharedKey, errorMessage, key2, pubkey2))
-    {
-        LogPrintf("CSpySendRelay()::VerifyMessage - ERROR: Invalid shared key: '%s'\n", errorMessage.c_str());
+    if(!spySendSigner.GetKeysFromSecret(strSharedKey, key2, pubkey2)) {
+        LogPrintf("CSpySendRelay::VerifyMessage -- GetKeysFromSecret() failed, invalid shared key %s\n", strSharedKey);
         return false;
     }
 
-    if(!spySendSigner.VerifyMessage(pubkey2, vchSig2, strMessage, errorMessage)) {
-        LogPrintf("CSpySendRelay()::VerifyMessage - Verify message failed\n");
+    if(!spySendSigner.VerifyMessage(pubkey2, vchSig2, strMessage, strError)) {
+        LogPrintf("CSpySendRelay::VerifyMessage -- VerifyMessage() failed, error: %s\n", strError);
         return false;
     }
 
@@ -85,7 +83,7 @@ bool CSpySendRelay::VerifyMessage(std::string strSharedKey)
 
 void CSpySendRelay::Relay()
 {
-    int nCount = std::min(mnodeman.CountEnabled(MIN_POOL_PEER_PROTO_VERSION), 20);
+    int nCount = std::min(mnodeman.CountEnabled(MIN_SPYSEND_PEER_PROTO_VERSION), 20);
     int nRank1 = (rand() % nCount)+1; 
     int nRank2 = (rand() % nCount)+1; 
 
@@ -101,15 +99,14 @@ void CSpySendRelay::Relay()
 
 void CSpySendRelay::RelayThroughNode(int nRank)
 {
-    CEternitynode* pen = mnodeman.GetEternitynodeByRank(nRank, nBlockHeight, MIN_POOL_PEER_PROTO_VERSION);
+    CEternitynode* pmn = mnodeman.GetEternitynodeByRank(nRank, nBlockHeight, MIN_SPYSEND_PEER_PROTO_VERSION);
 
-    if(pen != NULL){
-        //printf("RelayThroughNode %s\n", pen->addr.ToString().c_str());
-        CNode* pnode = ConnectNode((CAddress)pen->addr, NULL, false);
-        if(pnode){
+    if(pmn != NULL){
+        //printf("RelayThroughNode %s\n", pmn->addr.ToString().c_str());
+        CNode* pnode = ConnectNode((CAddress)pmn->addr, NULL);
+        if(pnode) {
             //printf("Connected\n");
             pnode->PushMessage("dsr", (*this));
-            pnode->Release();
             return;
         }
     } else {

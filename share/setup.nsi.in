@@ -7,7 +7,7 @@ SetCompressor /SOLID lzma
 !define REGKEY "SOFTWARE\$(^Name)"
 !define VERSION @CLIENT_VERSION_MAJOR@.@CLIENT_VERSION_MINOR@.@CLIENT_VERSION_REVISION@
 !define COMPANY "Eternity Core project"
-!define URL https://www.eternity-group.io/
+!define URL https://www.eternity-group.org/
 
 # MUI Symbol Definitions
 !define MUI_ICON "@abs_top_srcdir@/share/pixmaps/bitcoin.ico"
@@ -48,11 +48,11 @@ Var StartMenuGroup
 !insertmacro MUI_LANGUAGE English
 
 # Installer attributes
-OutFile @abs_top_srcdir@/eternity-${VERSION}-win@WINDOWS_BITS@-setup.exe
+OutFile @abs_top_srcdir@/eternitycore-${VERSION}-win@WINDOWS_BITS@-setup.exe
 !if "@WINDOWS_BITS@" == "64"
-InstallDir $PROGRAMFILES64\Eternity
+InstallDir $PROGRAMFILES64\EternityCore
 !else
-InstallDir $PROGRAMFILES\Eternity
+InstallDir $PROGRAMFILES\EternityCore
 !endif
 CRCCheck on
 XPStyle on
@@ -106,10 +106,10 @@ Section -post SEC0001
     WriteRegStr HKCU "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$(^Name)" UninstallString $INSTDIR\uninstall.exe
     WriteRegDWORD HKCU "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$(^Name)" NoModify 1
     WriteRegDWORD HKCU "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$(^Name)" NoRepair 1
-    WriteRegStr HKCR "eternity" "URL Protocol" ""
-    WriteRegStr HKCR "eternity" "" "URL:Eternity"
-    WriteRegStr HKCR "eternity\DefaultIcon" "" $INSTDIR\eternity-qt.exe
-    WriteRegStr HKCR "eternity\shell\open\command" "" '"$INSTDIR\eternity-qt.exe" "%1"'
+    WriteRegStr HKCR "eternitycore" "URL Protocol" ""
+    WriteRegStr HKCR "eternitycore" "" "URL:Eternity"
+    WriteRegStr HKCR "eternitycore\DefaultIcon" "" $INSTDIR\eternity-qt.exe
+    WriteRegStr HKCR "eternitycore\shell\open\command" "" '"$INSTDIR\eternity-qt.exe" "%1"'
 SectionEnd
 
 # Macro for selecting uninstaller sections
@@ -147,7 +147,7 @@ Section -un.post UNSEC0001
     DeleteRegValue HKCU "${REGKEY}" Path
     DeleteRegKey /IfEmpty HKCU "${REGKEY}\Components"
     DeleteRegKey /IfEmpty HKCU "${REGKEY}"
-    DeleteRegKey HKCR "eternity"
+    DeleteRegKey HKCR "eternitycore"
     RmDir /REBOOTOK $SMPROGRAMS\$StartMenuGroup
     RmDir /REBOOTOK $INSTDIR
     Push $R0

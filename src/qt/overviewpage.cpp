@@ -1,6 +1,6 @@
-// Copyright (c) 2011-2014 The Bitcoin developers
-// Copyright (c) 2016 The Eternity developers
-// Distributed under the MIT/X11 software license, see the accompanying
+// Copyright (c) 2011-2015 The Bitcoin Core developers
+// Copyright (c) 2016-2017 The Eternity group Core developers
+// Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "overviewpage.h"
@@ -8,30 +8,38 @@
 
 #include "bitcoinunits.h"
 #include "clientmodel.h"
-#include "spysend.h"
-#include "spysendconfig.h"
 #include "guiconstants.h"
 #include "guiutil.h"
+#include "init.h"
 #include "optionsmodel.h"
+#include "platformstyle.h"
 #include "transactionfilterproxy.h"
 #include "transactiontablemodel.h"
+#include "utilitydialog.h"
 #include "walletmodel.h"
-#include "init.h"
+
+#include "spysend.h"
+#include "instantx.h"
+#include "spysendconfig.h"
+#include "eternitynode-sync.h"
 
 #include <QAbstractItemDelegate>
 #include <QPainter>
 #include <QSettings>
 #include <QTimer>
 
-#define DECORATION_SIZE 48
 #define ICON_OFFSET 16
+#define DECORATION_SIZE 54
 #define NUM_ITEMS 5
+#define NUM_ITEMS_ADV 7
 
 class TxViewDelegate : public QAbstractItemDelegate
 {
     Q_OBJECT
 public:
-    TxViewDelegate(): QAbstractItemDelegate(), unit(BitcoinUnits::ENT)
+    TxViewDelegate(const PlatformStyle *platformStyle):
+        QAbstractItemDelegate(), unit(BitcoinUnits::ENT),
+        platformStyle(platformStyle)
     {
 
     }
@@ -41,7 +49,7 @@ public:
     {
         painter->save();
 
-        QIcon icon = qvariant_cast<QIcon>(index.data(Qt::DecorationRole));
+        QIcon icon = qvariant_cast<QIcon>(index.data(TransactionTableModel::RawDecorationRole));
         QRect mainRect = option.rect;
         mainRect.moveLeft(ICON_OFFSET);
         QRect decorationRect(mainRect.topLeft(), QSize(DECORATION_SIZE, DECORATION_SIZE));
@@ -50,6 +58,7 @@ public:
         int halfheight = (mainRect.height() - 2*ypad)/2;
         QRect amountRect(mainRect.left() + xspace, mainRect.top()+ypad, mainRect.width() - xspace - ICON_OFFSET, halfheight);
         QRect addressRect(mainRect.left() + xspace, mainRect.top()+ypad+halfheight, mainRect.width() - xspace, halfheight);
+        icon = platformStyle->SingleColorIcon(icon);
         icon.paint(painter, decorationRect);
 
         QDateTime date = index.data(TransactionTableModel::DateRole).toDateTime();
@@ -88,7 +97,7 @@ public:
             foreground = option.palette.color(QPalette::Text);
         }
         painter->setPen(foreground);
-        QString amountText = BitcoinUnits::formatWithUnit(unit, amount, true, BitcoinUnits::separatorAlways);
+        QString amountText = BitcoinUnits::floorWithUnit(unit, amount, true, BitcoinUnits::separatorAlways);
         if(!confirmed)
         {
             amountText = QString("[") + amountText + QString("]");
@@ -107,11 +116,12 @@ public:
     }
 
     int unit;
+    const PlatformStyle *platformStyle;
 
 };
 #include "overviewpage.moc"
 
-OverviewPage::OverviewPage(QWidget *parent) :
+OverviewPage::OverviewPage(const PlatformStyle *platformStyle, QWidget *parent) :
     QWidget(parent),
     ui(new Ui::OverviewPage),
     clientModel(0),
@@ -122,53 +132,61 @@ OverviewPage::OverviewPage(QWidget *parent) :
     currentWatchOnlyBalance(-1),
     currentWatchUnconfBalance(-1),
     currentWatchImmatureBalance(-1),
-    txdelegate(new TxViewDelegate()),
+    txdelegate(new TxViewDelegate(platformStyle)),
     filter(0)
 {
     ui->setupUi(this);
+    QString theme = GUIUtil::getThemeName();
 
     // Recent transactions
     ui->listTransactions->setItemDelegate(txdelegate);
     ui->listTransactions->setIconSize(QSize(DECORATION_SIZE, DECORATION_SIZE));
-    ui->listTransactions->setMinimumHeight(NUM_ITEMS * (DECORATION_SIZE + 2));
+    // Note: minimum height of listTransactions will be set later in updateAdvancedPSUI() to reflect actual settings
     ui->listTransactions->setAttribute(Qt::WA_MacShowFocusRect, false);
 
     connect(ui->listTransactions, SIGNAL(clicked(QModelIndex)), this, SLOT(handleTransactionClicked(QModelIndex)));
 
-
     // init "out of sync" warning labels
     ui->labelWalletStatus->setText("(" + tr("out of sync") + ")");
-    ui->labelSpysendSyncStatus->setText("(" + tr("out of sync") + ")");
+    ui->labelSpySendSyncStatus->setText("(" + tr("out of sync") + ")");
     ui->labelTransactionsStatus->setText("(" + tr("out of sync") + ")");
 
-    if(fLiteMode){
-        ui->frameSpysend->setVisible(false);
-    } else {
-        if(fEternityNode){
-            ui->toggleSpysend->setText("(" + tr("Disabled") + ")");
-            ui->spysendAuto->setText("(" + tr("Disabled") + ")");
-            ui->spysendReset->setText("(" + tr("Disabled") + ")");
-            ui->frameSpysend->setEnabled(false);
-        } else {
-            if(!fEnableSpysend){
-                ui->toggleSpysend->setText(tr("Start Spysend Mixing"));
-            } else {
-                ui->toggleSpysend->setText(tr("Stop Spysend Mixing"));
-            }
-            timer = new QTimer(this);
-            connect(timer, SIGNAL(timeout()), this, SLOT(spySendStatus()));
-            timer->start(1000);
-        }
-    }
+    // hide PS frame (helps to preserve saved size)
+    // we'll setup and make it visible in updateAdvancedPSUI() later if we are not in litemode
+    ui->frameSpySend->setVisible(false);
 
     // start with displaying the "out of sync" warnings
     showOutOfSyncWarning(true);
+
+    // that's it for litemode
+    if(fLiteMode) return;
+
+    // Disable any PS UI for eternitynode or when autobackup is disabled or failed for whatever reason
+    if(fEternityNode || nWalletBackups <= 0){
+        DisableSpySendCompletely();
+        if (nWalletBackups <= 0) {
+            ui->labelSpySendEnabled->setToolTip(tr("Automatic backups are disabled, no mixing available!"));
+        }
+    } else {
+        if(!fEnableSpySend){
+            ui->toggleSpySend->setText(tr("Start Mixing"));
+        } else {
+            ui->toggleSpySend->setText(tr("Stop Mixing"));
+        }
+        // Disable spySendPool builtin support for automatic backups while we are in GUI,
+        // we'll handle automatic backups and user warnings in spySendStatus()
+        spySendPool.fCreateAutoBackups = false;
+
+        timer = new QTimer(this);
+        connect(timer, SIGNAL(timeout()), this, SLOT(spySendStatus()));
+        timer->start(1000);
+    }
 }
 
 void OverviewPage::handleTransactionClicked(const QModelIndex &index)
 {
     if(filter)
-        emit transactionClicked(filter->mapToSource(index));
+        Q_EMIT transactionClicked(filter->mapToSource(index));
 }
 
 OverviewPage::~OverviewPage()
@@ -206,7 +224,7 @@ void OverviewPage::setBalance(const CAmount& balance, const CAmount& unconfirmed
     ui->labelImmatureText->setVisible(showImmature || showWatchOnlyImmature);
     ui->labelWatchImmature->setVisible(showWatchOnlyImmature); // show watch-only immature balance
 
-    updateSpysendProgress();
+    updateSpySendProgress();
 
     static int cachedTxLocks = 0;
 
@@ -253,34 +271,27 @@ void OverviewPage::setWalletModel(WalletModel *model)
     this->walletModel = model;
     if(model && model->getOptionsModel())
     {
-        // Set up transaction list
-        filter = new TransactionFilterProxy();
-        filter->setSourceModel(model->getTransactionTableModel());
-        filter->setLimit(NUM_ITEMS);
-        filter->setDynamicSortFilter(true);
-        filter->setSortRole(Qt::EditRole);
-        filter->setShowInactive(false);
-        filter->sort(TransactionTableModel::Status, Qt::DescendingOrder);
-
-        ui->listTransactions->setModel(filter);
-        ui->listTransactions->setModelColumn(TransactionTableModel::ToAddress);
-
+        // update the display unit, to not use the default ("ENT")
+        updateDisplayUnit();
         // Keep up to date with wallet
         setBalance(model->getBalance(), model->getUnconfirmedBalance(), model->getImmatureBalance(), model->getAnonymizedBalance(),
                    model->getWatchBalance(), model->getWatchUnconfirmedBalance(), model->getWatchImmatureBalance());
         connect(model, SIGNAL(balanceChanged(CAmount,CAmount,CAmount,CAmount,CAmount,CAmount,CAmount)), this, SLOT(setBalance(CAmount,CAmount,CAmount,CAmount,CAmount,CAmount,CAmount)));
 
         connect(model->getOptionsModel(), SIGNAL(displayUnitChanged(int)), this, SLOT(updateDisplayUnit()));
+        connect(model->getOptionsModel(), SIGNAL(spySendRoundsChanged()), this, SLOT(updateSpySendProgress()));
+        connect(model->getOptionsModel(), SIGNAL(privateSentAmountChanged()), this, SLOT(updateSpySendProgress()));
+        connect(model->getOptionsModel(), SIGNAL(advancedPSUIChanged(bool)), this, SLOT(updateAdvancedPSUI(bool)));
+        // explicitly update PS frame and transaction list to reflect actual settings
+        updateAdvancedPSUI(model->getOptionsModel()->getShowAdvancedPSUI());
 
-        connect(ui->spysendAuto, SIGNAL(clicked()), this, SLOT(spysendAuto()));
-        connect(ui->spysendReset, SIGNAL(clicked()), this, SLOT(spysendReset()));
-        connect(ui->toggleSpysend, SIGNAL(clicked()), this, SLOT(toggleSpysend()));
+        connect(ui->spySendAuto, SIGNAL(clicked()), this, SLOT(spySendAuto()));
+        connect(ui->spySendReset, SIGNAL(clicked()), this, SLOT(spySendReset()));
+        connect(ui->spySendInfo, SIGNAL(clicked()), this, SLOT(spySendInfo()));
+        connect(ui->toggleSpySend, SIGNAL(clicked()), this, SLOT(toggleSpySend()));
         updateWatchOnlyLabels(model->haveWatchOnly());
         connect(model, SIGNAL(notifyWatchonlyChanged(bool)), this, SLOT(updateWatchOnlyLabels(bool)));
     }
-
-    // update the display unit, to not use the default ("ENT")
-    updateDisplayUnit();
 }
 
 void OverviewPage::updateDisplayUnit()
@@ -308,27 +319,27 @@ void OverviewPage::updateAlerts(const QString &warnings)
 void OverviewPage::showOutOfSyncWarning(bool fShow)
 {
     ui->labelWalletStatus->setVisible(fShow);
-    ui->labelSpysendSyncStatus->setVisible(fShow);
+    ui->labelSpySendSyncStatus->setVisible(fShow);
     ui->labelTransactionsStatus->setVisible(fShow);
 }
 
-void OverviewPage::updateSpysendProgress()
+void OverviewPage::updateSpySendProgress()
 {
     if(!eternitynodeSync.IsBlockchainSynced() || ShutdownRequested()) return;
 
     if(!pwalletMain) return;
 
     QString strAmountAndRounds;
-    QString strAnonymizeEternityAmount = BitcoinUnits::formatHtmlWithUnit(nDisplayUnit, nAnonymizeEternityAmount * COIN, false, BitcoinUnits::separatorAlways);
+    QString strSpySendAmount = BitcoinUnits::formatHtmlWithUnit(nDisplayUnit, nSpySendAmount * COIN, false, BitcoinUnits::separatorAlways);
 
     if(currentBalance == 0)
     {
-        ui->spysendProgress->setValue(0);
-        ui->spysendProgress->setToolTip(tr("No inputs detected"));
+        ui->spySendProgress->setValue(0);
+        ui->spySendProgress->setToolTip(tr("No inputs detected"));
 
         // when balance is zero just show info from settings
-        strAnonymizeEternityAmount = strAnonymizeEternityAmount.remove(strAnonymizeEternityAmount.indexOf("."), BitcoinUnits::decimals(nDisplayUnit) + 1);
-        strAmountAndRounds = strAnonymizeEternityAmount + " / " + tr("%n Rounds", "", nSpysendRounds);
+        strSpySendAmount = strSpySendAmount.remove(strSpySendAmount.indexOf("."), BitcoinUnits::decimals(nDisplayUnit) + 1);
+        strAmountAndRounds = strSpySendAmount + " / " + tr("%n Rounds", "", nSpySendRounds);
 
         ui->labelAmountRounds->setToolTip(tr("No inputs detected"));
         ui->labelAmountRounds->setText(strAmountAndRounds);
@@ -342,9 +353,6 @@ void OverviewPage::updateSpysendProgress()
     double nAverageAnonymizedRounds;
 
     {
-        TRY_LOCK(cs_main, lockMain);
-        if(!lockMain) return;
-
         nDenominatedConfirmedBalance = pwalletMain->GetDenominatedBalance();
         nDenominatedUnconfirmedBalance = pwalletMain->GetDenominatedBalance(true);
         nAnonymizableBalance = pwalletMain->GetAnonymizableBalance();
@@ -355,25 +363,25 @@ void OverviewPage::updateSpysendProgress()
     CAmount nMaxToAnonymize = nAnonymizableBalance + currentAnonymizedBalance + nDenominatedUnconfirmedBalance;
 
     // If it's more than the anon threshold, limit to that.
-    if(nMaxToAnonymize > nAnonymizeEternityAmount*COIN) nMaxToAnonymize = nAnonymizeEternityAmount*COIN;
+    if(nMaxToAnonymize > nSpySendAmount*COIN) nMaxToAnonymize = nSpySendAmount*COIN;
 
     if(nMaxToAnonymize == 0) return;
 
-    if(nMaxToAnonymize >= nAnonymizeEternityAmount * COIN) {
+    if(nMaxToAnonymize >= nSpySendAmount * COIN) {
         ui->labelAmountRounds->setToolTip(tr("Found enough compatible inputs to anonymize %1")
-                                          .arg(strAnonymizeEternityAmount));
-        strAnonymizeEternityAmount = strAnonymizeEternityAmount.remove(strAnonymizeEternityAmount.indexOf("."), BitcoinUnits::decimals(nDisplayUnit) + 1);
-        strAmountAndRounds = strAnonymizeEternityAmount + " / " + tr("%n Rounds", "", nSpysendRounds);
+                                          .arg(strSpySendAmount));
+        strSpySendAmount = strSpySendAmount.remove(strSpySendAmount.indexOf("."), BitcoinUnits::decimals(nDisplayUnit) + 1);
+        strAmountAndRounds = strSpySendAmount + " / " + tr("%n Rounds", "", nSpySendRounds);
     } else {
         QString strMaxToAnonymize = BitcoinUnits::formatHtmlWithUnit(nDisplayUnit, nMaxToAnonymize, false, BitcoinUnits::separatorAlways);
         ui->labelAmountRounds->setToolTip(tr("Not enough compatible inputs to anonymize <span style='color:red;'>%1</span>,<br>"
                                              "will anonymize <span style='color:red;'>%2</span> instead")
-                                          .arg(strAnonymizeEternityAmount)
+                                          .arg(strSpySendAmount)
                                           .arg(strMaxToAnonymize));
         strMaxToAnonymize = strMaxToAnonymize.remove(strMaxToAnonymize.indexOf("."), BitcoinUnits::decimals(nDisplayUnit) + 1);
         strAmountAndRounds = "<span style='color:red;'>" +
                 QString(BitcoinUnits::factor(nDisplayUnit) == 1 ? "" : "~") + strMaxToAnonymize +
-                " / " + tr("%n Rounds", "", nSpysendRounds) + "</span>";
+                " / " + tr("%n Rounds", "", nSpySendRounds) + "</span>";
     }
     ui->labelAmountRounds->setText(strAmountAndRounds);
 
@@ -382,7 +390,7 @@ void OverviewPage::updateSpysendProgress()
     float denomPart = 0;
     // mixing progress of denominated balance
     float anonNormPart = 0;
-    // completeness of full amount anonimization
+    // completeness of full amount anonymization
     float anonFullPart = 0;
 
     CAmount denominatedBalance = nDenominatedConfirmedBalance + nDenominatedUnconfirmedBalance;
@@ -400,7 +408,7 @@ void OverviewPage::updateSpysendProgress()
 
     // apply some weights to them ...
     float denomWeight = 1;
-    float anonNormWeight = nSpysendRounds;
+    float anonNormWeight = nSpySendRounds;
     float anonFullWeight = 2;
     float fullWeight = denomWeight + anonNormWeight + anonFullWeight;
     // ... and calculate the whole progress
@@ -410,102 +418,189 @@ void OverviewPage::updateSpysendProgress()
     float progress = denomPartCalc + anonNormPartCalc + anonFullPartCalc;
     if(progress >= 100) progress = 100;
 
-    ui->spysendProgress->setValue(progress);
+    ui->spySendProgress->setValue(progress);
 
     QString strToolPip = ("<b>" + tr("Overall progress") + ": %1%</b><br/>" +
                           tr("Denominated") + ": %2%<br/>" +
                           tr("Mixed") + ": %3%<br/>" +
                           tr("Anonymized") + ": %4%<br/>" +
-                          tr("Denominated inputs have %5 of %n rounds on average", "", nSpysendRounds))
+                          tr("Denominated inputs have %5 of %n rounds on average", "", nSpySendRounds))
             .arg(progress).arg(denomPart).arg(anonNormPart).arg(anonFullPart)
             .arg(nAverageAnonymizedRounds);
-    ui->spysendProgress->setToolTip(strToolPip);
+    ui->spySendProgress->setToolTip(strToolPip);
 }
 
+void OverviewPage::updateAdvancedPSUI(bool fShowAdvancedPSUI) {
+    this->fShowAdvancedPSUI = fShowAdvancedPSUI;
+    int nNumItems = (fLiteMode || !fShowAdvancedPSUI) ? NUM_ITEMS : NUM_ITEMS_ADV;
+    SetupTransactionList(nNumItems);
+
+    if (fLiteMode) return;
+
+    ui->frameSpySend->setVisible(true);
+    ui->labelCompletitionText->setVisible(fShowAdvancedPSUI);
+    ui->spySendProgress->setVisible(fShowAdvancedPSUI);
+    ui->labelSubmittedDenomText->setVisible(fShowAdvancedPSUI);
+    ui->labelSubmittedDenom->setVisible(fShowAdvancedPSUI);
+    ui->spySendAuto->setVisible(fShowAdvancedPSUI);
+    ui->spySendReset->setVisible(fShowAdvancedPSUI);
+    ui->spySendInfo->setVisible(true);
+    ui->labelSpySendLastMessage->setVisible(fShowAdvancedPSUI);
+}
 
 void OverviewPage::spySendStatus()
 {
+    if(!eternitynodeSync.IsBlockchainSynced() || ShutdownRequested()) return;
+
     static int64_t nLastDSProgressBlockTime = 0;
+    int nBestHeight = clientModel->getNumBlocks();
 
-    int nBestHeight = chainActive.Tip()->nHeight;
-
-    // we we're processing more then 1 block per second, we'll just leave
-    if(((nBestHeight - spySendPool.cachedNumBlocks) / (GetTimeMillis() - nLastDSProgressBlockTime + 1) > 1)) return;
+    // We are processing more then 1 block per second, we'll just leave
+    if(((nBestHeight - spySendPool.nCachedNumBlocks) / (GetTimeMillis() - nLastDSProgressBlockTime + 1) > 1)) return;
     nLastDSProgressBlockTime = GetTimeMillis();
 
-    if(!fEnableSpysend) {
-        if(nBestHeight != spySendPool.cachedNumBlocks)
-        {
-            spySendPool.cachedNumBlocks = nBestHeight;
-            updateSpysendProgress();
+    QString strKeysLeftText(tr("keys left: %1").arg(pwalletMain->nKeysLeftSinceAutoBackup));
+    if(pwalletMain->nKeysLeftSinceAutoBackup < SPYSEND_KEYS_THRESHOLD_WARNING) {
+        strKeysLeftText = "<span style='color:red;'>" + strKeysLeftText + "</span>";
+    }
+    ui->labelSpySendEnabled->setToolTip(strKeysLeftText);
 
-            ui->spysendEnabled->setText(tr("Disabled"));
-            ui->spysendStatus->setText("");
-            ui->toggleSpysend->setText(tr("Start Spysend Mixing"));
+    if (!fEnableSpySend) {
+        if (nBestHeight != spySendPool.nCachedNumBlocks) {
+            spySendPool.nCachedNumBlocks = nBestHeight;
+            updateSpySendProgress();
         }
+
+        ui->labelSpySendLastMessage->setText("");
+        ui->toggleSpySend->setText(tr("Start Mixing"));
+
+        QString strEnabled = tr("Disabled");
+        // Show how many keys left in advanced PS UI mode only
+        if (fShowAdvancedPSUI) strEnabled += ", " + strKeysLeftText;
+        ui->labelSpySendEnabled->setText(strEnabled);
 
         return;
     }
 
-    // check spysend status and unlock if needed
-    if(nBestHeight != spySendPool.cachedNumBlocks)
-    {
-        // Balance and number of transactions might have changed
-        spySendPool.cachedNumBlocks = nBestHeight;
-        updateSpysendProgress();
+    // Warn user that wallet is running out of keys
+    // NOTE: we do NOT warn user and do NOT create autobackups if mixing is not running
+    if (nWalletBackups > 0 && pwalletMain->nKeysLeftSinceAutoBackup < SPYSEND_KEYS_THRESHOLD_WARNING) {
+        QSettings settings;
+        if(settings.value("fLowKeysWarning").toBool()) {
+            QString strWarn =   tr("Very low number of keys left since last automatic backup!") + "<br><br>" +
+                                tr("We are about to create a new automatic backup for you, however "
+                                   "<span style='color:red;'> you should always make sure you have backups "
+                                   "saved in some safe place</span>!") + "<br><br>" +
+                                tr("Note: You turn this message off in options.");
+            ui->labelSpySendEnabled->setToolTip(strWarn);
+            LogPrintf("OverviewPage::spySendStatus -- Very low number of keys left since last automatic backup, warning user and trying to create new backup...\n");
+            QMessageBox::warning(this, tr("SpySend"), strWarn, QMessageBox::Ok, QMessageBox::Ok);
+        } else {
+            LogPrintf("OverviewPage::spySendStatus -- Very low number of keys left since last automatic backup, skipping warning and trying to create new backup...\n");
+        }
 
-        ui->spysendEnabled->setText(tr("Enabled"));
+        std::string strBackupWarning;
+        std::string strBackupError;
+        if(!AutoBackupWallet(pwalletMain, "", strBackupWarning, strBackupError)) {
+            if (!strBackupWarning.empty()) {
+                // It's still more or less safe to continue but warn user anyway
+                LogPrintf("OverviewPage::spySendStatus -- WARNING! Something went wrong on automatic backup: %s\n", strBackupWarning);
+
+                QMessageBox::warning(this, tr("SpySend"),
+                    tr("WARNING! Something went wrong on automatic backup") + ":<br><br>" + strBackupWarning.c_str(),
+                    QMessageBox::Ok, QMessageBox::Ok);
+            }
+            if (!strBackupError.empty()) {
+                // Things are really broken, warn user and stop mixing immediately
+                LogPrintf("OverviewPage::spySendStatus -- ERROR! Failed to create automatic backup: %s\n", strBackupError);
+
+                QMessageBox::warning(this, tr("SpySend"),
+                    tr("ERROR! Failed to create automatic backup") + ":<br><br>" + strBackupError.c_str() + "<br>" +
+                    tr("Mixing is disabled, please close your wallet and fix the issue!"),
+                    QMessageBox::Ok, QMessageBox::Ok);
+            }
+        }
+    }
+
+    QString strEnabled = fEnableSpySend ? tr("Enabled") : tr("Disabled");
+    // Show how many keys left in advanced PS UI mode only
+    if(fShowAdvancedPSUI) strEnabled += ", " + strKeysLeftText;
+    ui->labelSpySendEnabled->setText(strEnabled);
+
+    if(nWalletBackups == -1) {
+        // Automatic backup failed, nothing else we can do until user fixes the issue manually
+        DisableSpySendCompletely();
+
+        QString strError =  tr("ERROR! Failed to create automatic backup") + ", " +
+                            tr("see debug.log for details.") + "<br><br>" +
+                            tr("Mixing is disabled, please close your wallet and fix the issue!");
+        ui->labelSpySendEnabled->setToolTip(strError);
+
+        return;
+    } else if(nWalletBackups == -2) {
+        // We were able to create automatic backup but keypool was not replenished because wallet is locked.
+        QString strWarning = tr("WARNING! Failed to replenish keypool, please unlock your wallet to do so.");
+        ui->labelSpySendEnabled->setToolTip(strWarning);
+    }
+
+    // check spysend status and unlock if needed
+    if(nBestHeight != spySendPool.nCachedNumBlocks) {
+        // Balance and number of transactions might have changed
+        spySendPool.nCachedNumBlocks = nBestHeight;
+        updateSpySendProgress();
     }
 
     QString strStatus = QString(spySendPool.GetStatus().c_str());
 
-    QString s = tr("Last Spysend message:\n") + strStatus;
+    QString s = tr("Last SpySend message:\n") + strStatus;
 
-    if(s != ui->spysendStatus->text())
-        LogPrintf("Last Spysend message: %s\n", strStatus.toStdString());
+    if(s != ui->labelSpySendLastMessage->text())
+        LogPrintf("OverviewPage::spySendStatus -- Last SpySend message: %s\n", strStatus.toStdString());
 
-    ui->spysendStatus->setText(s);
+    ui->labelSpySendLastMessage->setText(s);
 
-    if(spySendPool.sessionDenom == 0){
+    if(spySendPool.nSessionDenom == 0){
         ui->labelSubmittedDenom->setText(tr("N/A"));
     } else {
-        std::string out;
-        spySendPool.GetDenominationsToString(spySendPool.sessionDenom, out);
-        QString s2(out.c_str());
-        ui->labelSubmittedDenom->setText(s2);
+        QString strDenom(spySendPool.GetDenominationsToString(spySendPool.nSessionDenom).c_str());
+        ui->labelSubmittedDenom->setText(strDenom);
     }
 
 }
 
-void OverviewPage::spysendAuto(){
+void OverviewPage::spySendAuto(){
     spySendPool.DoAutomaticDenominating();
 }
 
-void OverviewPage::spysendReset(){
-    spySendPool.Reset();
+void OverviewPage::spySendReset(){
+    spySendPool.ResetPool();
 
-    QMessageBox::warning(this, tr("Spysend"),
-        tr("Spysend was successfully reset."),
+    QMessageBox::warning(this, tr("SpySend"),
+        tr("SpySend was successfully reset."),
         QMessageBox::Ok, QMessageBox::Ok);
 }
 
-void OverviewPage::toggleSpysend(){
+void OverviewPage::spySendInfo(){
+    HelpMessageDialog dlg(this, HelpMessageDialog::pshelp);
+    dlg.exec();
+}
+
+void OverviewPage::toggleSpySend(){
     QSettings settings;
     // Popup some information on first mixing
     QString hasMixed = settings.value("hasMixed").toString();
     if(hasMixed.isEmpty()){
-        QMessageBox::information(this, tr("Spysend"),
-                tr("If you don't want to see internal Spysend fees/transactions select \"Most Common\" as Type on the \"Transactions\" tab."),
+        QMessageBox::information(this, tr("SpySend"),
+                tr("If you don't want to see internal SpySend fees/transactions select \"Most Common\" as Type on the \"Transactions\" tab."),
                 QMessageBox::Ok, QMessageBox::Ok);
         settings.setValue("hasMixed", "hasMixed");
     }
-    if(!fEnableSpysend){
-        int64_t balance = currentBalance;
-        float minAmount = 1.49 * COIN;
-        if(balance < minAmount){
-            QString strMinAmount(BitcoinUnits::formatWithUnit(nDisplayUnit, minAmount));
-            QMessageBox::warning(this, tr("Spysend"),
-                tr("Spysend requires at least %1 to use.").arg(strMinAmount),
+    if(!fEnableSpySend){
+        CAmount nMinAmount = vecSpySendDenominations.back() + SPYSEND_COLLATERAL*4;
+        if(currentBalance < nMinAmount){
+            QString strMinAmount(BitcoinUnits::formatWithUnit(nDisplayUnit, nMinAmount));
+            QMessageBox::warning(this, tr("SpySend"),
+                tr("SpySend requires at least %1 to use.").arg(strMinAmount),
                 QMessageBox::Ok, QMessageBox::Ok);
             return;
         }
@@ -513,37 +608,66 @@ void OverviewPage::toggleSpysend(){
         // if wallet is locked, ask for a passphrase
         if (walletModel->getEncryptionStatus() == WalletModel::Locked)
         {
-            WalletModel::UnlockContext ctx(walletModel->requestUnlock(false));
+            WalletModel::UnlockContext ctx(walletModel->requestUnlock(true));
             if(!ctx.isValid())
             {
                 //unlock was cancelled
-                spySendPool.cachedNumBlocks = std::numeric_limits<int>::max();
-                QMessageBox::warning(this, tr("Spysend"),
-                    tr("Wallet is locked and user declined to unlock. Disabling Spysend."),
+                spySendPool.nCachedNumBlocks = std::numeric_limits<int>::max();
+                QMessageBox::warning(this, tr("SpySend"),
+                    tr("Wallet is locked and user declined to unlock. Disabling SpySend."),
                     QMessageBox::Ok, QMessageBox::Ok);
-                if (fDebug) LogPrintf("Wallet is locked and user declined to unlock. Disabling Spysend.\n");
+                LogPrint("spysend", "OverviewPage::toggleSpySend -- Wallet is locked and user declined to unlock. Disabling SpySend.\n");
                 return;
             }
         }
 
     }
 
-    fEnableSpysend = !fEnableSpysend;
-    spySendPool.cachedNumBlocks = std::numeric_limits<int>::max();
+    fEnableSpySend = !fEnableSpySend;
+    spySendPool.nCachedNumBlocks = std::numeric_limits<int>::max();
 
-    if(!fEnableSpysend){
-        ui->toggleSpysend->setText(tr("Start Spysend Mixing"));
+    if(!fEnableSpySend){
+        ui->toggleSpySend->setText(tr("Start Mixing"));
         spySendPool.UnlockCoins();
     } else {
-        ui->toggleSpysend->setText(tr("Stop Spysend Mixing"));
+        ui->toggleSpySend->setText(tr("Stop Mixing"));
 
         /* show spysend configuration if client has defaults set */
 
-        if(nAnonymizeEternityAmount == 0){
+        if(nSpySendAmount == 0){
             SpysendConfig dlg(this);
             dlg.setModel(walletModel);
             dlg.exec();
         }
 
     }
+}
+
+void OverviewPage::SetupTransactionList(int nNumItems) {
+    ui->listTransactions->setMinimumHeight(nNumItems * (DECORATION_SIZE + 2));
+
+    if(walletModel && walletModel->getOptionsModel()) {
+        // Set up transaction list
+        filter = new TransactionFilterProxy();
+        filter->setSourceModel(walletModel->getTransactionTableModel());
+        filter->setLimit(nNumItems);
+        filter->setDynamicSortFilter(true);
+        filter->setSortRole(Qt::EditRole);
+        filter->setShowInactive(false);
+        filter->sort(TransactionTableModel::Status, Qt::DescendingOrder);
+
+        ui->listTransactions->setModel(filter);
+        ui->listTransactions->setModelColumn(TransactionTableModel::ToAddress);
+    }
+}
+
+void OverviewPage::DisableSpySendCompletely() {
+    ui->toggleSpySend->setText("(" + tr("Disabled") + ")");
+    ui->spySendAuto->setText("(" + tr("Disabled") + ")");
+    ui->spySendReset->setText("(" + tr("Disabled") + ")");
+    ui->frameSpySend->setEnabled(false);
+    if (nWalletBackups <= 0) {
+        ui->labelSpySendEnabled->setText("<span style='color:red;'>(" + tr("Disabled") + ")</span>");
+    }
+    fEnableSpySend = false;
 }
