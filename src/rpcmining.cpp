@@ -649,17 +649,17 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
 	 }
 	 else if( (sporkManager.GetSporkValue(SPORK_6_EVOLUTION_PAYMENTS) == 1) && (pblock->voutSuperblock.size() == 1) )   //наш спорк
 	 { 
-	 if( pblock->txoutEternitynode != CTxOut() ) 
-	  {
-	   UniValue entry(UniValue::VOBJ);
-	   CTxDestination address1;
-	   ExtractDestination( pblock->voutSuperblock[0].scriptPubKey, address1 );
-	   CBitcoinAddress address2(address1);
-	   entry.push_back(Pair("payee", address2.ToString().c_str()));
-	   entry.push_back(Pair("script", HexStr(pblock->voutSuperblock[0].scriptPubKey.begin(), pblock->voutSuperblock[0].scriptPubKey.end())));
-	   entry.push_back(Pair("amount", pblock->voutSuperblock[0].nValue));
-	   superblockObjArray.push_back(entry);
-	  }
+		if( pblock->txoutEternitynode != CTxOut() ) 
+		{
+			UniValue entry(UniValue::VOBJ);
+			CTxDestination address1;
+			ExtractDestination( pblock->voutSuperblock[0].scriptPubKey, address1 );
+			CBitcoinAddress address2(address1);
+			entry.push_back(Pair("payee", address2.ToString().c_str()));
+			entry.push_back(Pair("script", HexStr(pblock->voutSuperblock[0].scriptPubKey.begin(), pblock->voutSuperblock[0].scriptPubKey.end())));
+			entry.push_back(Pair("amount", pblock->voutSuperblock[0].nValue));
+			superblockObjArray.push_back(entry);
+		}
 	 
 	 }
 

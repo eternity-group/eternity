@@ -2763,7 +2763,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                                 REJECT_INVALID, "bad-cb-payee");
     }
     
-	if( eternitynodeSync.IsBlockchainSynced() && (sporkManager.GetSporkValue(SPORK_6_EVOLUTION_PAYMENTS) == 1 ) ){	
+	if( eternitynodeSync.IsBlockchainSynced() && (sporkManager.GetSporkValue(SPORK_7_EVOLUTION_PAYMENTS_ENFORCEMENT) == 1 ) ){	
 		if( !evolutionManager.IsTransactionValid( block.vtx[0], pindex->nHeight, blockCurrEvolution )  ){
 			mapRejectedBlocks.insert(make_pair(block.GetHash(), GetTime()));
 			return state.DoS(0, error("ConnectBlock(ETERNITY): couldn't find eternity evolution payments"),
