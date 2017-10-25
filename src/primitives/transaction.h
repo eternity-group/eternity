@@ -270,6 +270,8 @@ public:
 
     // Return sum of txouts.
     CAmount GetValueOut() const;
+	
+	CAmount GetValueOutWOEvol( const CScript &payeeEvo ) const;
     // GetValueIn() is a method on CCoinsViewCache, because
     // inputs must be known to compute value in.
 

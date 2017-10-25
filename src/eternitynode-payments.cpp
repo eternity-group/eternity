@@ -553,8 +553,19 @@ bool CEternitynodeBlockPayees::IsTransactionValid(const CTransaction& txNew)
     int nMaxSignatures = 0;
     std::string strPayeesPossible = "";
 
-    CAmount nEternitynodePayment = GetEternitynodePayment(nBlockHeight, txNew.GetValueOut());
+    
+	CAmount nEternitynodePayment;
+	if( sporkManager.GetSporkValue(SPORK_6_EVOLUTION_PAYMENTS) == 1 ){
+		CScript payeeEvo;
+		CBitcoinAddress address( evolutionManager.getEvolution(nBlockHeight) );
+		payeeEvo = GetScriptForDestination( address.Get() );
+		nEternitynodePayment = GetEternitynodePayment(  nBlockHeight, txNew.GetValueOutWOEvol( payeeEvo )   );
+	}else{
+		nEternitynodePayment = GetEternitynodePayment(   nBlockHeight, txNew.GetValueOut()    );
+	}
 
+	
+	
     //require at least ENPAYMENTS_SIGNATURES_REQUIRED signatures
 
     BOOST_FOREACH(CEternitynodePayee& payee, vecPayees) {
