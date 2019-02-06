@@ -60,7 +60,6 @@ BITCOIN_TESTS =\
   test/main_tests.cpp \
   test/mempool_tests.cpp \
   test/merkle_tests.cpp \
-  test/miner_tests.cpp \
   test/multisig_tests.cpp \
   test/netbase_tests.cpp \
   test/pmt_tests.cpp \
@@ -69,7 +68,6 @@ BITCOIN_TESTS =\
   test/prevector_tests.cpp \
   test/ratecheck_tests.cpp \
   test/reverselock_tests.cpp \
-  test/rpc_tests.cpp \
   test/sanity_tests.cpp \
   test/scheduler_tests.cpp \
   test/script_P2SH_tests.cpp \
@@ -85,7 +83,6 @@ BITCOIN_TESTS =\
   test/test_eternity.h \
   test/timedata_tests.cpp \
   test/transaction_tests.cpp \
-  test/txvalidationcache_tests.cpp \
   test/versionbits_tests.cpp \
   test/uint256_tests.cpp \
   test/univalue_tests.cpp \
@@ -94,8 +91,7 @@ BITCOIN_TESTS =\
 if ENABLE_WALLET
 BITCOIN_TESTS += \
   test/accounting_tests.cpp \
-  wallet/test/wallet_tests.cpp \
-  test/rpc_wallet_tests.cpp
+  wallet/test/wallet_tests.cpp
 endif
 
 test_test_eternity_SOURCES = $(BITCOIN_TESTS) $(JSON_TEST_FILES) $(RAW_TEST_FILES)
