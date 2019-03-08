@@ -1,6 +1,8 @@
 Eternity Core staging tree 0.12.1
 ===============================
 
+`master:` [![Build Status](https://travis-ci.org/eternity-group/eternity.svg?branch=master)](https://travis-ci.org/eternity-group/eternity)
+
 https://www.eternity-group.org
 
 
