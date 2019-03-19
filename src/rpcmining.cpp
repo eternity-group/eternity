@@ -628,29 +628,24 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
 
     UniValue superblockObjArray(UniValue::VARR);
     
-	if (sporkManager.IsSporkActive(SPORK_9_SUPERBLOCKS_ENABLED))
-	 {
-
-	  if (pblock->voutSuperblock.size())
-	  {
-	   BOOST_FOREACH(const CTxOut& txout, pblock->voutSuperblock)
-	   {
-		UniValue entry(UniValue::VOBJ);
-		CTxDestination address1;
-		ExtractDestination(txout.scriptPubKey, address1);
-		CBitcoinAddress address2(address1);
-		entry.push_back(Pair("payee", address2.ToString().c_str()));
-		entry.push_back(Pair("script", HexStr(txout.scriptPubKey.begin(), txout.scriptPubKey.end())));
-		entry.push_back(Pair("amount", txout.nValue));
-		superblockObjArray.push_back(entry);
-	   }
-	  }
+	if( sporkManager.IsSporkActive(SPORK_9_SUPERBLOCKS_ENABLED) ){
+		if( pblock->voutSuperblock.size() ){
+				BOOST_FOREACH(const CTxOut& txout, pblock->voutSuperblock)
+				{
+					UniValue entry(UniValue::VOBJ);
+					CTxDestination address1;
+					ExtractDestination(txout.scriptPubKey, address1);
+					CBitcoinAddress address2(address1);
+					entry.push_back(Pair("payee", address2.ToString().c_str()));
+					entry.push_back(Pair("script", HexStr(txout.scriptPubKey.begin(), txout.scriptPubKey.end())));
+					entry.push_back(Pair("amount", txout.nValue));
+					superblockObjArray.push_back(entry);
+				}
+		}
 	  
-	 }
-	 else if( (sporkManager.GetSporkValue(SPORK_6_EVOLUTION_PAYMENTS) == 1) && (pblock->voutSuperblock.size() == 1) )   //наш спорк
-	 { 
-		if( pblock->txoutEternitynode != CTxOut() ) 
-		{
+	}
+	else if( (sporkManager.GetSporkValue(SPORK_6_EVOLUTION_PAYMENTS) == 1) && (pblock->voutSuperblock.size() == 1) ){ 
+	{
 			UniValue entry(UniValue::VOBJ);
 			CTxDestination address1;
 			ExtractDestination( pblock->voutSuperblock[0].scriptPubKey, address1 );
@@ -659,14 +654,11 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
 			entry.push_back(Pair("script", HexStr(pblock->voutSuperblock[0].scriptPubKey.begin(), pblock->voutSuperblock[0].scriptPubKey.end())));
 			entry.push_back(Pair("amount", pblock->voutSuperblock[0].nValue));
 			superblockObjArray.push_back(entry);
-		}
-	 
-	 }
-
-	 result.push_back(Pair("superblock", superblockObjArray) );
-	 result.push_back(Pair("superblocks_started", pindexPrev->nHeight + 1 > Params().GetConsensus().nSuperblockStartBlock));
-	 result.push_back(Pair("superblocks_enabled", sporkManager.IsSporkActive(SPORK_9_SUPERBLOCKS_ENABLED)));
-
+		}	 
+	}
+	result.push_back(Pair("superblock", superblockObjArray) );
+	result.push_back(Pair("superblocks_started", pindexPrev->nHeight + 1 > Params().GetConsensus().nSuperblockStartBlock));
+	result.push_back(Pair("superblocks_enabled", sporkManager.IsSporkActive(SPORK_9_SUPERBLOCKS_ENABLED)));
 
     return result;
 }

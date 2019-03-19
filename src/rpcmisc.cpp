@@ -279,9 +279,8 @@ UniValue spork(const UniValue& params, bool fHelp)
 		}	
 				
 
-		//broadcast new spork (записываем новые значения по спорку на локальный компьютер)
+		//broadcast new spork
 		if(  sporkManager.UpdateSpork( nSporkID, nValue, sEvolution )  ){
-			/////printf("VVA <VVA>: if... \n");
 			sporkManager.ExecuteSpork( nSporkID, nValue );
 			return "success";
 		} else {
