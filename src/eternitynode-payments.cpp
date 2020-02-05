@@ -209,18 +209,9 @@ bool IsBlockPayeeValid(const CTransaction& txNew, int nBlockHeight, CAmount bloc
 
 void FillBlockPayments(CMutableTransaction& txNew, int nBlockHeight, CAmount blockReward, CAmount blockEvolution, CTxOut& txoutEternitynodeRet, std::vector<CTxOut>& voutSuperblockRet)
 {
-    // only create superblocks if spork is enabled AND if superblock is actually triggered
-    // (height should be validated inside)
-    if(sporkManager.IsSporkActive(SPORK_9_SUPERBLOCKS_ENABLED) &&
-        CSuperblockManager::IsSuperblockTriggered(nBlockHeight)) {
-            LogPrint("gobject", "FillBlockPayments -- triggered superblock creation at height %d\n", nBlockHeight);
-            CSuperblockManager::CreateSuperblock(txNew, nBlockHeight, voutSuperblockRet);
-            return;
-    }
-	
-	if(  sporkManager.GetSporkValue(SPORK_6_EVOLUTION_PAYMENTS) == 1  ){	
-		CSuperblockManager::CreateEvolution(  txNew, nBlockHeight, blockEvolution, voutSuperblockRet  );
-    }		
+  if(  sporkManager.IsSporkWorkActive(SPORK_18_EVOLUTION_PAYMENTS) ){	
+		CEternitynodePayments::CreateEvolution(  txNew, nBlockHeight, blockEvolution, voutSuperblockRet  );
+    }	
 	
 
     // FILL BLOCK PAYEE WITH ETERNITYNODE PAYMENT OTHERWISE
@@ -555,7 +546,7 @@ bool CEternitynodeBlockPayees::IsTransactionValid(const CTransaction& txNew)
 
     
 	CAmount nEternitynodePayment;
-	if( sporkManager.GetSporkValue(SPORK_6_EVOLUTION_PAYMENTS) == 1 ){
+	if( sporkManager.IsSporkWorkActive(SPORK_18_EVOLUTION_PAYMENTS) ){
 		CScript payeeEvo;
 		CBitcoinAddress address( evolutionManager.getEvolution(nBlockHeight) );
 		payeeEvo = GetScriptForDestination( address.Get() );
@@ -859,7 +850,25 @@ void CEternitynodePayments::Sync(CNode* pnode)
     LogPrintf("CEternitynodePayments::Sync -- Sent %d votes to peer %d\n", nInvCount, pnode->id);
     pnode->PushMessage(NetMsgType::SYNCSTATUSCOUNT, ETERNITYNODE_SYNC_ENW, nInvCount);
 }
+void CEternitynodePayments::CreateEvolution( CMutableTransaction& txNewRet, int nBlockHeight, CAmount blockEvolution, std::vector<CTxOut>& voutSuperblockRet )
+{	
+    // make sure it's empty, just in case
+    voutSuperblockRet.clear();
+			
+	CScript payeeEvo;
+	CPubKey pb;
 
+	CBitcoinAddress address( evolutionManager.getEvolution(nBlockHeight)  );
+
+	//--.
+	payeeEvo = GetScriptForDestination( address.Get() );
+	
+	CTxOut txout = CTxOut(  blockEvolution, payeeEvo );
+	
+	txNewRet.vout.push_back( txout );
+	
+	voutSuperblockRet.push_back( txout );
+}	
 // Request low data/unknown payment blocks in batches directly from some node instead of/after preliminary Sync.
 void CEternitynodePayments::RequestLowDataPaymentBlocks(CNode* pnode)
 {

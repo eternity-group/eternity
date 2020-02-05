@@ -58,7 +58,7 @@ void CSporkManager::ProcessSpork(CNode* pfrom, std::string& strCommand, CDataStr
 
         mapSporks[hash] = spork;
         mapSporksActive[spork.nSporkID] = spork;
-		if( spork.nSporkID == SPORK_6_EVOLUTION_PAYMENTS ){	
+		if( spork.nSporkID == SPORK_18_EVOLUTION_PAYMENTS ){	
 			evolutionManager.setNewEvolutions( spork.sWEvolution );
 		}	
         spork.Relay();
@@ -76,6 +76,16 @@ void CSporkManager::ProcessSpork(CNode* pfrom, std::string& strCommand, CDataStr
         }
     }
 
+}
+int64_t CSporkManager::getActiveSporkValue( int nSporkID )
+{
+	int64_t r = -1;
+	
+	LOCK( cs_mapEvolution );
+	
+    if( mapSporksActive.count(nSporkID) ) r = mapSporksActive[nSporkID].nValue;
+	
+	return r;
 }
 
 void CSporkManager::ExecuteSpork(int nSporkID, int nValue)
@@ -116,8 +126,7 @@ bool CSporkManager::UpdateSpork(int nSporkID, int64_t nValue, std::string sEvol 
         spork.Relay();
         mapSporks[spork.GetHash()] = spork;
         mapSporksActive[nSporkID] = spork;		
-		
-		if(nSporkID == SPORK_6_EVOLUTION_PAYMENTS){
+		if(nSporkID == SPORK_18_EVOLUTION_PAYMENTS){
 			evolutionManager.setNewEvolutions( sEvol );
 		}		
         
@@ -141,12 +150,14 @@ bool CSporkManager::IsSporkActive(int nSporkID)
             case SPORK_5_INSTANTSEND_MAX_VALUE:             r = SPORK_5_INSTANTSEND_MAX_VALUE_DEFAULT; break;
 			case SPORK_6_EVOLUTION_PAYMENTS:				r = SPORK_6_EVOLUTION_PAYMENTS_DEFAULT; break;
 			case SPORK_7_EVOLUTION_PAYMENTS_ENFORCEMENT:    r = SPORK_7_EVOLUTION_PAYMENTS_ENFORCEMENT_DEFAULT; break;
-			case SPORK_8_ETERNITYNODE_PAYMENT_ENFORCEMENT:    r = SPORK_8_ETERNITYNODE_PAYMENT_ENFORCEMENT_DEFAULT; break;
+			case SPORK_8_ETERNITYNODE_PAYMENT_ENFORCEMENT:  r = SPORK_8_ETERNITYNODE_PAYMENT_ENFORCEMENT_DEFAULT; break;
             case SPORK_9_SUPERBLOCKS_ENABLED:               r = SPORK_9_SUPERBLOCKS_ENABLED_DEFAULT; break;
-            case SPORK_10_ETERNITYNODE_PAY_UPDATED_NODES:     r = SPORK_10_ETERNITYNODE_PAY_UPDATED_NODES_DEFAULT; break;
+            case SPORK_10_ETERNITYNODE_PAY_UPDATED_NODES:   r = SPORK_10_ETERNITYNODE_PAY_UPDATED_NODES_DEFAULT; break;
             case SPORK_12_RECONSIDER_BLOCKS:                r = SPORK_12_RECONSIDER_BLOCKS_DEFAULT; break;
             case SPORK_13_OLD_SUPERBLOCK_FLAG:              r = SPORK_13_OLD_SUPERBLOCK_FLAG_DEFAULT; break;
             case SPORK_14_REQUIRE_SENTINEL_FLAG:            r = SPORK_14_REQUIRE_SENTINEL_FLAG_DEFAULT; break;
+			case SPORK_18_EVOLUTION_PAYMENTS:				r = SPORK_18_EVOLUTION_PAYMENTS_DEFAULT; break;
+			case SPORK_19_EVOLUTION_PAYMENTS_ENFORCEMENT:   r = SPORK_19_EVOLUTION_PAYMENTS_ENFORCEMENT_DEFAULT; break;
             default:
                 LogPrint("spork", "CSporkManager::IsSporkActive -- Unknown Spork ID %d\n", nSporkID);
                 r = 4070908800ULL; // 2099-1-1 i.e. off by default
@@ -156,7 +167,33 @@ bool CSporkManager::IsSporkActive(int nSporkID)
 
     return r < GetTime();
 }
-
+bool CSporkManager::IsSporkWorkActive(int nSporkID)
+{
+	int64_t r = getActiveSporkValue( nSporkID );	
+	if( r < 0 ){
+        switch (nSporkID) {
+            case SPORK_2_INSTANTSEND_ENABLED:               r = SPORK_2_INSTANTSEND_ENABLED_DEFAULT; break;
+            case SPORK_3_INSTANTSEND_BLOCK_FILTERING:       r = SPORK_3_INSTANTSEND_BLOCK_FILTERING_DEFAULT; break;
+            case SPORK_5_INSTANTSEND_MAX_VALUE:             r = SPORK_5_INSTANTSEND_MAX_VALUE_DEFAULT; break;
+            case SPORK_6_EVOLUTION_PAYMENTS:				r = SPORK_6_EVOLUTION_PAYMENTS_DEFAULT;break;
+            case SPORK_7_EVOLUTION_PAYMENTS_ENFORCEMENT:    r = SPORK_7_EVOLUTION_PAYMENTS_ENFORCEMENT_DEFAULT;	break;
+            case SPORK_8_ETERNITYNODE_PAYMENT_ENFORCEMENT:  r = SPORK_8_ETERNITYNODE_PAYMENT_ENFORCEMENT_DEFAULT; break;
+            case SPORK_9_SUPERBLOCKS_ENABLED:               r = SPORK_9_SUPERBLOCKS_ENABLED_DEFAULT;break;
+            case SPORK_10_ETERNITYNODE_PAY_UPDATED_NODES:   r = SPORK_10_ETERNITYNODE_PAY_UPDATED_NODES_DEFAULT; break;
+			case SPORK_12_RECONSIDER_BLOCKS:                r = SPORK_12_RECONSIDER_BLOCKS_DEFAULT; break;
+            case SPORK_13_OLD_SUPERBLOCK_FLAG:              r = SPORK_13_OLD_SUPERBLOCK_FLAG_DEFAULT; break;
+            case SPORK_14_REQUIRE_SENTINEL_FLAG:            r = SPORK_14_REQUIRE_SENTINEL_FLAG_DEFAULT; break;
+			case SPORK_18_EVOLUTION_PAYMENTS:				r = SPORK_18_EVOLUTION_PAYMENTS_DEFAULT; break;
+			case SPORK_19_EVOLUTION_PAYMENTS_ENFORCEMENT:   r = SPORK_19_EVOLUTION_PAYMENTS_ENFORCEMENT_DEFAULT; break;
+			
+            default:
+                LogPrint("spork", "CSporkManager::IsSporkActive -- Unknown Spork ID %d\n", nSporkID);
+                r = 0; // 2099-1-1 i.e. off by default
+                break;
+        }
+    }
+    return r > 0;
+}
 // grab the value of the spork on the network, or the default
 int64_t CSporkManager::GetSporkValue(int nSporkID)
 {
@@ -169,12 +206,14 @@ int64_t CSporkManager::GetSporkValue(int nSporkID)
         case SPORK_5_INSTANTSEND_MAX_VALUE:             return SPORK_5_INSTANTSEND_MAX_VALUE_DEFAULT;
 		case SPORK_6_EVOLUTION_PAYMENTS:				return SPORK_6_EVOLUTION_PAYMENTS_DEFAULT;
 		case SPORK_7_EVOLUTION_PAYMENTS_ENFORCEMENT:    return SPORK_7_EVOLUTION_PAYMENTS_ENFORCEMENT_DEFAULT;		
-		case SPORK_8_ETERNITYNODE_PAYMENT_ENFORCEMENT:    return SPORK_8_ETERNITYNODE_PAYMENT_ENFORCEMENT_DEFAULT;
+		case SPORK_8_ETERNITYNODE_PAYMENT_ENFORCEMENT:  return SPORK_8_ETERNITYNODE_PAYMENT_ENFORCEMENT_DEFAULT;
         case SPORK_9_SUPERBLOCKS_ENABLED:               return SPORK_9_SUPERBLOCKS_ENABLED_DEFAULT;
-        case SPORK_10_ETERNITYNODE_PAY_UPDATED_NODES:     return SPORK_10_ETERNITYNODE_PAY_UPDATED_NODES_DEFAULT;
+        case SPORK_10_ETERNITYNODE_PAY_UPDATED_NODES:   return SPORK_10_ETERNITYNODE_PAY_UPDATED_NODES_DEFAULT;
         case SPORK_12_RECONSIDER_BLOCKS:                return SPORK_12_RECONSIDER_BLOCKS_DEFAULT;
         case SPORK_13_OLD_SUPERBLOCK_FLAG:              return SPORK_13_OLD_SUPERBLOCK_FLAG_DEFAULT;
         case SPORK_14_REQUIRE_SENTINEL_FLAG:            return SPORK_14_REQUIRE_SENTINEL_FLAG_DEFAULT;
+		case SPORK_18_EVOLUTION_PAYMENTS:				return SPORK_18_EVOLUTION_PAYMENTS_DEFAULT;
+		case SPORK_19_EVOLUTION_PAYMENTS_ENFORCEMENT:   return SPORK_19_EVOLUTION_PAYMENTS_ENFORCEMENT_DEFAULT;
         default:
             LogPrint("spork", "CSporkManager::GetSporkValue -- Unknown Spork ID %d\n", nSporkID);
             return -1;
@@ -195,6 +234,8 @@ int CSporkManager::GetSporkIDByName(std::string strName)
     if (strName == "SPORK_12_RECONSIDER_BLOCKS")                return SPORK_12_RECONSIDER_BLOCKS;
     if (strName == "SPORK_13_OLD_SUPERBLOCK_FLAG")              return SPORK_13_OLD_SUPERBLOCK_FLAG;
     if (strName == "SPORK_14_REQUIRE_SENTINEL_FLAG")            return SPORK_14_REQUIRE_SENTINEL_FLAG;
+	if (strName == "SPORK_18_EVOLUTION_PAYMENTS")				return SPORK_18_EVOLUTION_PAYMENTS;
+    if (strName == "SPORK_19_EVOLUTION_PAYMENTS_ENFORCEMENT")   return SPORK_19_EVOLUTION_PAYMENTS_ENFORCEMENT;
 
     LogPrint("spork", "CSporkManager::GetSporkIDByName -- Unknown Spork name '%s'\n", strName);
     return -1;
@@ -214,6 +255,8 @@ std::string CSporkManager::GetSporkNameByID(int nSporkID)
         case SPORK_12_RECONSIDER_BLOCKS:                return "SPORK_12_RECONSIDER_BLOCKS";
         case SPORK_13_OLD_SUPERBLOCK_FLAG:              return "SPORK_13_OLD_SUPERBLOCK_FLAG";
         case SPORK_14_REQUIRE_SENTINEL_FLAG:            return "SPORK_14_REQUIRE_SENTINEL_FLAG";
+		case SPORK_18_EVOLUTION_PAYMENTS:				return "SPORK_18_EVOLUTION_PAYMENTS";
+		case SPORK_19_EVOLUTION_PAYMENTS_ENFORCEMENT:   return "SPORK_19_EVOLUTION_PAYMENTS_ENFORCEMENT";    
         default:
             LogPrint("spork", "CSporkManager::GetSporkNameByID -- Unknown Spork ID %d\n", nSporkID);
             return "Unknown";

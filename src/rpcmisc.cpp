@@ -244,8 +244,10 @@ UniValue spork(const UniValue& params, bool fHelp)
         // SPORK VALUE
         int64_t nValue = params[1].get_int64();
 
-		if(  (nSporkID == SPORK_9_SUPERBLOCKS_ENABLED) && (sporkManager.GetSporkValue(SPORK_6_EVOLUTION_PAYMENTS) != 0)  ){
-			return "Invalid config, SPORK_6_EVOLUTION_PAYMENTS is active";
+		if(  (nSporkID == SPORK_19_EVOLUTION_PAYMENTS_ENFORCEMENT) )
+		{
+			if( ( nValue - (int64_t)chainActive.Height()) < 2 )
+				return "Invalid config, bad value";
 		}
 
 		
@@ -260,25 +262,18 @@ UniValue spork(const UniValue& params, bool fHelp)
     }
 	else if (params.size() == 3){
 		int nSporkID = sporkManager.GetSporkIDByName(params[0].get_str());
-
-		if(  (nSporkID == -1) || (nSporkID != SPORK_6_EVOLUTION_PAYMENTS)  ){
+		//--.
+		if(  (nSporkID == -1) || (nSporkID != SPORK_18_EVOLUTION_PAYMENTS)  ){
 			return "Invalid spork name";
-		}
-
-		if(  sporkManager.IsSporkActive(SPORK_9_SUPERBLOCKS_ENABLED)   ){
-			return "Invalid config, SPORK_9_SUPERBLOCKS_ENABLED is active";
 		}
 
 		// SPORK VALUE
 		int64_t nValue		= params[1].get_int64();
 		string sEvolution	= params[2].get_str();
-		
 		//--.
 		if( !evolutionManager.checkEvolutionString( sEvolution ) ){	
 			return "Invalid spork evolution param name";
 		}	
-				
-
 		//broadcast new spork
 		if(  sporkManager.UpdateSpork( nSporkID, nValue, sEvolution )  ){
 			sporkManager.ExecuteSpork( nSporkID, nValue );
