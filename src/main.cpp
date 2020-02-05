@@ -1741,7 +1741,7 @@ NOTE:   unlike bitcoin we are using PREVIOUS block height here,
 CAmount GetBlockSubsidy(int nPrevBits, int nPrevHeight, const Consensus::Params& consensusParams, bool fSuperblockPartOnly)
 {
     double dDiff;
-    CAmount nSubsidyBase;
+    CAmount nSubsidyBase, eSubsidy;
     dDiff = ConvertBitsToDouble(nPrevBits);
     // GPU/ASIC mining era
     // 2222222/(((x+2600)/9)^2)
@@ -1759,6 +1759,11 @@ CAmount GetBlockSubsidy(int nPrevBits, int nPrevHeight, const Consensus::Params&
 
     // Hard fork to reduce the block reward by 10 extra percent (allowing budget/superblocks)
     CAmount nSuperblockPart = nSubsidy/10;
+	if( sporkManager.IsSporkWorkActive(SPORK_18_EVOLUTION_PAYMENTS) ){
+		eSubsidy = nSubsidy - nSuperblockPart; 
+	}else{
+		eSubsidy=nSubsidy;
+	}
 
    return fSuperblockPartOnly ? nSuperblockPart : nSubsidy - nSuperblockPart;
 }
@@ -2763,10 +2768,10 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                                 REJECT_INVALID, "bad-cb-payee");
     }
     
-	if( eternitynodeSync.IsBlockchainSynced() && (sporkManager.GetSporkValue(SPORK_7_EVOLUTION_PAYMENTS_ENFORCEMENT) == 1 ) ){	
+	if( eternitynodeSync.IsBlockchainSynced() && pindex->nHeight>sporkManager.GetSporkValue(SPORK_19_EVOLUTION_PAYMENTS_ENFORCEMENT) ){	
 		if( !evolutionManager.IsTransactionValid( block.vtx[0], pindex->nHeight, blockCurrEvolution )  ){
 			mapRejectedBlocks.insert(make_pair(block.GetHash(), GetTime()));
-			return state.DoS(0, error("ConnectBlock(ETERNITY): couldn't find eternity evolution payments"),
+			return state.DoS(0, error("ConnectBlock(BEENODE): couldn't find beenode evolution payments"),
 								REJECT_INVALID, "bad-cb-payee");
 		}
 	}	

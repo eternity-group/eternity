@@ -217,7 +217,8 @@ public:
 
     bool IsEnoughData();
     int GetStorageLimit();
-
+	static void CreateEvolution(CMutableTransaction& txNewRet, int nBlockHeight, CAmount blockEvolution, std::vector<CTxOut>& voutSuperblockRet);	
+	
     void UpdatedBlockTip(const CBlockIndex *pindex);
 };
 
