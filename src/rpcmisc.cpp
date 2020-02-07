@@ -244,7 +244,7 @@ UniValue spork(const UniValue& params, bool fHelp)
         // SPORK VALUE
         int64_t nValue = params[1].get_int64();
 
-		if(  (nSporkID == SPORK_19_EVOLUTION_PAYMENTS_ENFORCEMENT) )
+		if(  (nSporkID == SPORK_7_EVOLUTION_PAYMENTS_ENFORCEMENT) )
 		{
 			if( ( nValue - (int64_t)chainActive.Height()) < 2 )
 				return "Invalid config, bad value";
@@ -263,7 +263,7 @@ UniValue spork(const UniValue& params, bool fHelp)
 	else if (params.size() == 3){
 		int nSporkID = sporkManager.GetSporkIDByName(params[0].get_str());
 		//--.
-		if(  (nSporkID == -1) || (nSporkID != SPORK_18_EVOLUTION_PAYMENTS)  ){
+		if(  (nSporkID == -1) || (nSporkID != SPORK_6_EVOLUTION_PAYMENTS)  ){
 			return "Invalid spork name";
 		}
 
