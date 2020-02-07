@@ -640,8 +640,8 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
         }
     }
 	result.push_back(Pair("evolution", superblockObjArray));
-	bool bWk1 = sporkManager.IsSporkWorkActive(SPORK_18_EVOLUTION_PAYMENTS);
-    bool bWk2 = (pindexPrev->nHeight+1) > sporkManager.GetSporkValue(SPORK_19_EVOLUTION_PAYMENTS_ENFORCEMENT);
+	bool bWk1 = sporkManager.IsSporkWorkActive(SPORK_6_EVOLUTION_PAYMENTS);
+    bool bWk2 = (pindexPrev->nHeight+1) > sporkManager.GetSporkValue(SPORK_7_EVOLUTION_PAYMENTS_ENFORCEMENT);
 	result.push_back(Pair("evolution_payments_started", bWk1) );
     result.push_back(Pair("evolution_payments_enforced", bWk2) );
     return result;

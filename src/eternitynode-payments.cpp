@@ -209,7 +209,7 @@ bool IsBlockPayeeValid(const CTransaction& txNew, int nBlockHeight, CAmount bloc
 
 void FillBlockPayments(CMutableTransaction& txNew, int nBlockHeight, CAmount blockReward, CAmount blockEvolution, CTxOut& txoutEternitynodeRet, std::vector<CTxOut>& voutSuperblockRet)
 {
-  if(  sporkManager.IsSporkWorkActive(SPORK_18_EVOLUTION_PAYMENTS) ){	
+  if(  sporkManager.IsSporkWorkActive(SPORK_6_EVOLUTION_PAYMENTS) ){	
 		CEternitynodePayments::CreateEvolution(  txNew, nBlockHeight, blockEvolution, voutSuperblockRet  );
     }	
 	
@@ -546,7 +546,7 @@ bool CEternitynodeBlockPayees::IsTransactionValid(const CTransaction& txNew)
 
     
 	CAmount nEternitynodePayment;
-	if( sporkManager.IsSporkWorkActive(SPORK_18_EVOLUTION_PAYMENTS) ){
+	if( sporkManager.IsSporkWorkActive(SPORK_6_EVOLUTION_PAYMENTS) ){
 		CScript payeeEvo;
 		CBitcoinAddress address( evolutionManager.getEvolution(nBlockHeight) );
 		payeeEvo = GetScriptForDestination( address.Get() );

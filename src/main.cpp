@@ -1759,7 +1759,7 @@ CAmount GetBlockSubsidy(int nPrevBits, int nPrevHeight, const Consensus::Params&
 
     // Hard fork to reduce the block reward by 10 extra percent (allowing budget/superblocks)
     CAmount nSuperblockPart = nSubsidy/10;
-	if( sporkManager.IsSporkWorkActive(SPORK_18_EVOLUTION_PAYMENTS) ){
+	if( sporkManager.IsSporkWorkActive(SPORK_6_EVOLUTION_PAYMENTS) ){
 		eSubsidy = nSubsidy - nSuperblockPart; 
 	}else{
 		eSubsidy=nSubsidy;
@@ -2768,7 +2768,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                                 REJECT_INVALID, "bad-cb-payee");
     }
     
-	if( eternitynodeSync.IsBlockchainSynced() && pindex->nHeight>sporkManager.GetSporkValue(SPORK_19_EVOLUTION_PAYMENTS_ENFORCEMENT) ){	
+	if( eternitynodeSync.IsBlockchainSynced() && pindex->nHeight>sporkManager.GetSporkValue(SPORK_7_EVOLUTION_PAYMENTS_ENFORCEMENT) ){	
 		if( !evolutionManager.IsTransactionValid( block.vtx[0], pindex->nHeight, blockCurrEvolution )  ){
 			mapRejectedBlocks.insert(make_pair(block.GetHash(), GetTime()));
 			return state.DoS(0, error("ConnectBlock(BEENODE): couldn't find beenode evolution payments"),
